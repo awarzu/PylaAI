@@ -6,7 +6,7 @@ import customtkinter as ctk
 import pyautogui
 from PIL import Image
 from customtkinter import CTkImage
-from utils import load_toml_as_dict, update_toml_file
+from utils import load_toml_as_dict, update_toml_file, save_brawler_icon
 from tkinter import filedialog
 
 debug = load_toml_as_dict("cfg/general_config.toml")['super_debug'] == "yes"
@@ -52,7 +52,11 @@ class SelectBrawler:
 
         for brawler in self.brawlers:
             img_path = f"./api/assets/brawler_icons/{brawler}.png"
-            img = Image.open(img_path)
+            try:
+                img = Image.open(img_path)
+            except FileNotFoundError:
+                save_brawler_icon(brawler)
+                img = Image.open(img_path)
 
             img_tk = CTkImage(img, size=(square_size, square_size))
             self.images.append((brawler, img_tk))  # Store tuple of brawler name and image
@@ -154,9 +158,9 @@ class SelectBrawler:
             border_color=self.colors['cherry red'], border_width=int(2 * scale_factor), height=int(28 * scale_factor)
         )
 
-        mastery_var = tk.StringVar()
-        mastery_entry = ctk.CTkEntry(
-            top, textvariable=mastery_var, fg_color=self.colors['ui box gray'], text_color="white",
+        wins_var = tk.StringVar()
+        wins_entry = ctk.CTkEntry(
+            top, textvariable=wins_var, fg_color=self.colors['ui box gray'], text_color="white",
             border_color=self.colors['cherry red'], border_width=int(2 * scale_factor), height=int(28 * scale_factor)
         )
 
@@ -168,7 +172,7 @@ class SelectBrawler:
 
         auto_pick_var = tk.BooleanVar(value=True)  # Checkbox variable, ticked by default
         auto_pick_checkbox = ctk.CTkCheckBox(
-            top, text="Auto-pick Brawler in game", variable=auto_pick_var,
+            top, text="Bot auto-selects brawler", variable=auto_pick_var,
             fg_color=self.colors['cherry red'], text_color="white", checkbox_height=int(24 * scale_factor)
         )
 
@@ -176,26 +180,26 @@ class SelectBrawler:
             push_until_value = push_until_var.get()
             push_until_value = int(push_until_value) if push_until_value.isdigit() else ""
             trophies_value = int(trophies_var.get())
-            mastery_value = mastery_var.get()
-            mastery_value = int(mastery_value) if mastery_value.isdigit() else ""
+            wins_value = wins_var.get()
+            wins_value = int(wins_value) if wins_value.isdigit() else ""
             current_win_streak_value = current_win_streak_var.get()
-            if self.farm_type == "trophies" and mastery_value == "":
-                mastery_value = 0
+            if self.farm_type == "trophies" and wins_value == "":
+                wins_value = 0
             data = {
                 "brawler": brawler,
                 "push_until": push_until_value,
                 "trophies": trophies_value,
-                "mastery": mastery_value,
+                "wins": wins_value,
                 "type": self.farm_type,
                 "automatically_pick": auto_pick_var.get(),
                 "win_streak": int(current_win_streak_value)
             }
 
             if data["type"] == "":
-                if data["trophies"] <= data["mastery"]:
+                if data["trophies"] <= data["wins"]:
                     data["type"] = "trophies"
                 else:
-                    data["type"] = "mastery"
+                    data["type"] = "wins"
 
             self.brawlers_data = [item for item in self.brawlers_data if item["brawler"] != data["brawler"]]
             self.brawlers_data.append(data)
@@ -209,11 +213,11 @@ class SelectBrawler:
             text_color="white", border_width=int(2 * scale_factor), width=int(80 * scale_factor)
         )
 
-        farm_type_button_frame = ctk.CTkFrame(top, width=int(200 * scale_factor), height=int(50 * scale_factor),
+        farm_type_button_frame = ctk.CTkFrame(top, width=int(210 * scale_factor), height=int(50 * scale_factor),
                                               fg_color=self.colors['ui box gray'])
 
-        self.mastery_button = ctk.CTkButton(farm_type_button_frame, text="Mastery", width=int(85 * scale_factor),
-                                            command=lambda: self.set_farm_type_color("mastery"),
+        self.wins_button = ctk.CTkButton(farm_type_button_frame, text="Win Amount", width=int(90 * scale_factor),
+                                            command=lambda: self.set_farm_type_color("wins"),
                                             hover_color=self.colors['cherry red'],
                                             font=("", int(15 * scale_factor)),
                                             fg_color=self.colors["ui box gray"],
@@ -229,7 +233,7 @@ class SelectBrawler:
                                              )
 
         self.trophies_button.place(x=int(10 * scale_factor))
-        self.mastery_button.place(x=int(110 * scale_factor))
+        self.wins_button.place(x=int(110 * scale_factor))
 
         ctk.CTkLabel(top, text=f"Brawler: {brawler}", font=("Comic sans MS", int(20 * scale_factor)),
                      text_color=self.colors['red']).pack(
@@ -241,9 +245,9 @@ class SelectBrawler:
         ctk.CTkLabel(top, text="Trophies", font=("Comic sans MS", int(15 * scale_factor)),
                      text_color=self.colors['chess white']).pack()
         trophies_entry.pack(pady=int(4 * scale_factor))
-        ctk.CTkLabel(top, text="Mastery", font=("Comic sans MS", int(15 * scale_factor)),
+        ctk.CTkLabel(top, text="Win Amount", font=("Comic sans MS", int(15 * scale_factor)),
                      text_color=self.colors['chess white']).pack()
-        mastery_entry.pack(pady=int(4 * scale_factor))
+        wins_entry.pack(pady=int(4 * scale_factor))
         ctk.CTkLabel(top, text="Brawler's Win Streak", font=("Comic sans MS", int(15 * scale_factor)),
                      text_color=self.colors['chess white']).pack()
         current_win_streak_entry.pack(pady=int(4 * scale_factor))
@@ -252,11 +256,11 @@ class SelectBrawler:
 
     def set_farm_type_color(self, value):
         self.farm_type = value
-        if value == "mastery":
-            self.mastery_button.configure(fg_color=self.colors['cherry red'])
+        if value == "wins":
+            self.wins_button.configure(fg_color=self.colors['cherry red'])
             self.trophies_button.configure(fg_color=self.colors['ui box gray'])
         else:
-            self.mastery_button.configure(fg_color=self.colors['ui box gray'])
+            self.wins_button.configure(fg_color=self.colors['ui box gray'])
             self.trophies_button.configure(fg_color=self.colors['cherry red'])
 
     def update_images(self, filter_text):

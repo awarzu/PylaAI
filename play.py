@@ -178,7 +178,7 @@ class Play(Movement):
         self.is_hypercharge_ready = False
         self.is_gadget_ready = False
         self.brawler_types = {
-            "throwers": ["barley", "dynamike", "grom", "larrylawrie", "mrp", "sprout", "tick", "willow"]
+            "throwers": ["barley", "dynamike", "grom", "larrylawrie", "mrp", "sprout", "tick", "willow", "juju", "ziggy", "berry", "mico", "shade", "jacky", "doug", "gigi", "trunks"]
         }
         self.brawler_ranges = self.load_brawler_ranges()
         self.time_since_detections = {
