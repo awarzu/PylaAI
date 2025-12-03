@@ -171,9 +171,6 @@ class Play(Movement):
         self.time_since_gadget_checked = time.time()
         self.time_since_hypercharge_checked = time.time()
         self.time_since_walls_checked = time.time()
-        self.wait_for_random_movement = 0
-        self.same_move_up_counter = {'wa': 0, 'wd': 0}
-        self.last_player_coords = []
         self.time_since_movement_change = time.time()
         self.current_brawler = None
         self.is_hypercharge_ready = False
@@ -190,7 +187,6 @@ class Play(Movement):
 
         self.last_movement = ''
         self.last_movement_time = time.time()
-        self.movement_hold_time = 0.2  # Minimum time to hold a movement before changing
         self.wall_history = []
         self.wall_history_length = 3  # Number of frames to keep walls
         self.scene_data = []
@@ -447,7 +443,7 @@ class Play(Movement):
 
         current_time = time.time()
         if movement != self.last_movement:
-            if current_time - self.last_movement_time >= self.movement_hold_time:
+            if current_time - self.last_movement_time >= self.minimum_movement_delay:
                 self.last_movement = movement
                 self.last_movement_time = current_time
             else:
