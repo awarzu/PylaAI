@@ -118,6 +118,8 @@ class StageManager:
         push_current_brawler_till = self.brawlers_pick_data[0]['push_until']
         if push_current_brawler_till == "" and type_of_push == "wins":
             push_current_brawler_till = 300
+        if push_current_brawler_till == "" and type_of_push == "trophies":
+            push_current_brawler_till = 1000
 
         if value >= push_current_brawler_till:
             if len(self.brawlers_pick_data) <= 1:
@@ -201,6 +203,8 @@ class StageManager:
                     value = 0
                 if push_current_brawler_till == "" and type_to_push == "wins":
                     push_current_brawler_till = 300
+                if push_current_brawler_till == "" and type_to_push == "trophies":
+                    push_current_brawler_till = 1000
 
                 if value >= push_current_brawler_till:
                     if len(self.brawlers_pick_data) <= 1:
