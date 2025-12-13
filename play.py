@@ -32,13 +32,14 @@ class Movement:
         }
         self.game_mode = load_toml_as_dict("cfg/bot_config.toml")["gamemode_type"]
         self.should_use_gadget = load_toml_as_dict("cfg/bot_config.toml")["bot_uses_gadgets"] == "yes" or load_toml_as_dict("cfg/bot_config.toml")["bot_uses_gadgets"] == "true"
+        self.super_treshold = load_toml_as_dict("cfg/time_tresholds.toml")["super"]
         self.gadget_treshold = load_toml_as_dict("cfg/time_tresholds.toml")["gadget"]
         self.hypercharge_treshold = load_toml_as_dict("cfg/time_tresholds.toml")["hypercharge"]
         self.walls_treshold = load_toml_as_dict("cfg/time_tresholds.toml")["wall_detection"]
         self.keep_walls_in_memory = self.walls_treshold <= 1
         self.last_walls_data = None
         self.keys_hold = []
-        self.time_since_movement_change = time.time()
+        self.time_since_different_movement = time.time()
         self.time_since_gadget_checked = time.time()
         self.is_gadget_ready = False
         self.time_since_hypercharge_checked = time.time()
@@ -77,7 +78,7 @@ class Movement:
 
     @staticmethod
     def attack():
-        pyautogui.press("e")
+        pyautogui.press("m")
 
     @staticmethod
     def use_hypercharge():
@@ -86,6 +87,10 @@ class Movement:
     @staticmethod
     def use_gadget():
         pyautogui.press("g")
+
+    @staticmethod
+    def use_super():
+        pyautogui.press("e")
 
     @staticmethod
     def get_random_attack_key():
@@ -109,10 +114,10 @@ class Movement:
             return self.fix_movement_keys['fixed']
 
         if "".join(self.keys_hold) != movement and movement[::-1] != "".join(self.keys_hold):
-            self.time_since_movement_change = current_time
+            self.time_since_different_movement = current_time
 
-        # print(f"Last change: {self.time_since_movement_change}", f" self.hold: {self.keys_hold}",f" c movement: {movement}")
-        if current_time - self.time_since_movement_change > self.fix_movement_keys["delay_to_trigger"]:
+        # print(f"Last change: {self.time_since_different_movement}", f" self.hold: {self.keys_hold}",f" c movement: {movement}")
+        if current_time - self.time_since_different_movement > self.fix_movement_keys["delay_to_trigger"]:
             reversed_movement = self.reverse_movement(movement)
 
             if reversed_movement == "s":
@@ -170,11 +175,13 @@ class Play(Movement):
         self.time_since_movement = time.time()
         self.time_since_gadget_checked = time.time()
         self.time_since_hypercharge_checked = time.time()
+        self.time_since_super_checked = time.time()
         self.time_since_walls_checked = time.time()
         self.time_since_movement_change = time.time()
         self.current_brawler = None
         self.is_hypercharge_ready = False
         self.is_gadget_ready = False
+        self.is_super_ready = False
         self.brawler_types = {
             "throwers": ["barley", "dynamike", "grom", "larrylawrie", "mrp", "sprout", "tick", "willow", "juju", "ziggy", "berry", "mico", "shade", "jacky", "doug", "gigi", "trunks"]
         }
@@ -195,6 +202,7 @@ class Play(Movement):
         self.no_detection_proceed_delay = load_toml_as_dict("cfg/time_tresholds.toml")["no_detection_proceed"]
         self.gadget_pixels_minimum = load_toml_as_dict("cfg/bot_config.toml")["gadget_pixels_minimum"]
         self.hypercharge_pixels_minimum = load_toml_as_dict("cfg/bot_config.toml")["hypercharge_pixels_minimum"]
+        self.super_pixels_minimum = load_toml_as_dict("cfg/bot_config.toml")["super_pixels_minimum"]
         self.wall_detection_confidence = load_toml_as_dict("cfg/bot_config.toml")["wall_detection_confidence"]
 
     def get_specific_data(self, frame):
@@ -363,6 +371,13 @@ class Play(Movement):
             return True
         return False
 
+    def check_if_super_ready(self, frame):
+        screenshot = frame.crop((1408 * width_ratio, 802 * height_ratio, 1500 * width_ratio, 895 * height_ratio))
+        yellow_pixels = count_hsv_pixels(screenshot, (19, 200, 249), (24, 226, 255))
+        if yellow_pixels > self.super_pixels_minimum:
+            return True
+        return False
+
     def get_tile_data(self, frame):
         tile_data = self.Detect_tile_detector.detect_objects(frame, conf_tresh=self.wall_detection_confidence)
         return tile_data
@@ -461,6 +476,10 @@ class Play(Movement):
                 self.use_hypercharge()
                 self.time_since_hypercharge_checked = time.time()
                 self.is_hypercharge_ready = False
+            if self.is_super_ready:
+                self.use_super()
+                self.time_since_super_checked = time.time()
+                self.is_super_ready = False
             enemy_hittable = self.is_enemy_hittable(player_pos, enemy_coords, walls)
             # print("enemy hittable", enemy_hittable, "enemy_distance", enemy_distance)
             if enemy_hittable:
@@ -487,7 +506,7 @@ class Play(Movement):
         data = self.validate_game_data(data)
         self.track_no_detections(data)
         if not data:
-            self.time_since_movement_change = time.time()
+            self.time_since_different_movement = time.time()
 
             if current_time - self.time_since_last_proceeding > self.no_detection_proceed_delay:
                 current_state = get_state(frame)
@@ -507,6 +526,10 @@ class Play(Movement):
         if current_time - self.time_since_gadget_checked > self.gadget_treshold:
             self.is_gadget_ready = self.check_if_gadget_ready(frame)
             self.time_since_gadget_checked = current_time
+        self.is_super_ready = False
+        if current_time - self.time_since_super_checked > self.super_treshold:
+            self.is_super_ready = self.check_if_super_ready(frame)
+            self.time_since_super_checked = current_time
 
         movement = self.loop(brawler, data, current_time)
 

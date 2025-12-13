@@ -63,12 +63,13 @@ class Hub:
         self.bot_config.setdefault("minimum_movement_delay", 0.4)
 
         # Time thresholds defaults
-        self.time_tresholds.setdefault("state_check", 5)
+        self.time_tresholds.setdefault("state_check", 3)
         self.time_tresholds.setdefault("no_detections", 10)
         self.time_tresholds.setdefault("idle", 10)
         self.time_tresholds.setdefault("specific_brawlers", 999)
+        self.time_tresholds.setdefault("super", 0.1)
         self.time_tresholds.setdefault("gadget", 0.5)
-        self.time_tresholds.setdefault("hypercharge", 3)
+        self.time_tresholds.setdefault("hypercharge", 2)
 
         # General config defaults
         self.general_config.setdefault("check_if_brawl_stars_crashed", "yes")
@@ -693,6 +694,14 @@ class Hub:
         crash_cb.grid(row=row_idx, column=1, sticky="w", padx=S(20), pady=S(10))
         row_idx += 1
 
+        create_labeled_entry(
+            label_text="Super Detection Pixel Treshold:",
+            config_key="super_pixels_minimum",
+            convert_func=float,
+            use_general_config=False,
+            tooltip_text='Amount of "yellow" pixels the bot must detect to consider the super is ready.'
+        )
+
         # 10) Gadget Detection Pixel Threshold (bot_config)
         create_labeled_entry(
             label_text="Gadget Detection Pixel Treshold:",
@@ -844,6 +853,11 @@ class Hub:
 
             row_idx += 1
 
+        create_timer_setting(
+            param_name="super",
+            label_text="Super Delay:",
+            tooltip_text="How often (in seconds) the bot checks if super is ready."
+        )
         create_timer_setting(
             param_name="hypercharge",
             label_text="Hypercharge Delay:",
