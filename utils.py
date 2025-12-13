@@ -19,6 +19,7 @@ import time
 from onnxtr.io import DocumentFile
 from onnxtr.models import ocr_predictor
 import easyocr
+import json
 
 def extract_text_and_positions(image_path):
     results = reader.readtext(image_path)
@@ -130,7 +131,8 @@ class ScreenshotTaker: #breaks if you alt tab, and idk how to fix it
         return image
 
 reader = OCR_Wrapper()
-api_base_url = "localhost"
+api_base_url = ""
+brawlers_info_file_path = "cfg/brawlers_info.json"
 
 def count_hsv_pixels(pil_image, low_hsv, high_hsv):
     opencv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
@@ -189,10 +191,21 @@ def update_toml_file(path, new_data):
     with open(path, 'w') as file:
         toml.dump(new_data, file)
 
+def load_brawlers_info():
+    if os.path.exists(brawlers_info_file_path):
+        with open(brawlers_info_file_path, 'r') as f:
+            return json.load(f)
+    else:
+        return {}
+
+def update_brawlers_info(brawlers_info):
+    with open(brawlers_info_file_path, 'w') as f:
+        json.dump(brawlers_info, f, indent=4)
+
 
 def get_brawler_list():
     if api_base_url == "localhost":
-        brawler_list =  list(load_toml_as_dict("cfg/ranges.toml").keys())[1:]
+        brawler_list = list(load_brawlers_info().keys())
         return brawler_list
     url = f'https://{api_base_url}/get_brawler_list'
     response = requests.post(url)
@@ -203,17 +216,16 @@ def get_brawler_list():
         return []
 
 
-def update_missing_brawler_ranges(brawlers):
-    brawler_ranges = load_toml_as_dict("cfg/ranges.toml")
+def update_missing_brawlers_info(brawlers):
+    brawlers_info = load_brawlers_info()
     for brawler in brawlers:
-        if brawler not in brawler_ranges:
-            # Fetch the range from the API
-            range_values = get_brawler_range(brawler)
-            if range_values:
-                brawler_ranges[brawler] = range_values
+        if brawler not in brawlers_info:
+            brawler_info = get_brawler_info(brawler)
+            if brawler_info:
+                brawlers_info[brawler] = brawler_info
                 # Save the updated ranges to the TOML file
-                save_dict_as_toml(brawler_ranges, "cfg/ranges.toml")
-                print(f"Added range for brawler '{brawler}': {range_values}")
+                update_brawlers_info(brawlers_info)
+                print(f"Added info for brawler '{brawler}': {brawler_info}")
                 # Download the brawler icon
                 save_brawler_icon(brawler)
             else:
@@ -222,12 +234,12 @@ def update_missing_brawler_ranges(brawlers):
             save_brawler_icon(brawler)
 
 
-def get_brawler_range(brawler_name):
-    url = f'https://{api_base_url}/get_brawler_range'  # Adjust the URL if necessary
+def get_brawler_info(brawler_name):
+    url = f'https://{api_base_url}/get_brawler_info'  # Adjust the URL if necessary
     response = requests.post(url, json={'brawler_name': brawler_name})
     if response.status_code == 200:
         data = response.json()
-        return data.get('range', [])
+        return data.get('info', [])
     else:
         print(f"Error fetching range for '{brawler_name}': {response.status_code} - {response.text}")
         return None

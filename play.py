@@ -8,7 +8,7 @@ from shapely.geometry import Polygon
 from state_finder.main import get_state
 from detect import Detect
 from state_finder.main import get_in_game_state
-from utils import load_toml_as_dict, count_hsv_pixels
+from utils import load_toml_as_dict, count_hsv_pixels, load_brawlers_info
 
 pyautogui.PAUSE = 0
 
@@ -182,10 +182,8 @@ class Play(Movement):
         self.is_hypercharge_ready = False
         self.is_gadget_ready = False
         self.is_super_ready = False
-        self.brawler_types = {
-            "throwers": ["barley", "dynamike", "grom", "larrylawrie", "mrp", "sprout", "tick", "willow", "juju", "ziggy", "berry", "mico", "shade", "jacky", "doug", "gigi", "trunks"]
-        }
-        self.brawler_ranges = self.load_brawler_ranges()
+        self.brawlers_info = load_brawlers_info()
+        self.brawler_ranges = self.load_brawler_ranges(self.brawlers_info)
         self.time_since_detections = {
             "player": time.time(),
             "enemy": time.time(),
@@ -209,15 +207,29 @@ class Play(Movement):
         self.specific_game_data = self.Detect_specific_info.detect_objects(frame)
 
     @staticmethod
-    def load_brawler_ranges():
-        ranges = load_toml_as_dict("cfg/ranges.toml")
+    def load_brawler_ranges(brawlers_info=None):
+        if not brawlers_info:
+            brawlers_info = load_brawlers_info()
         current_width, current_height = pyautogui.size()
         screen_size_ratio = min(current_height / 1080, current_width / 1920)
-        for k, v in ranges.items():
-            if k == "title":
-                continue
-            ranges[k] = [int(v[0] * screen_size_ratio), int(v[1] * screen_size_ratio)]
+        ranges = {}
+        for brawler, info in brawlers_info.items():
+            attack_range = info['attack_range']
+            safe_range = info['safe_range']
+            super_range = info['super_range']
+            v = [safe_range, attack_range, super_range]
+            ranges[brawler] = [int(v[0] * screen_size_ratio), int(v[1] * screen_size_ratio), int(v[2] * screen_size_ratio)]
         return ranges
+
+    @staticmethod
+    def can_attack_through_walls(brawler, skill_type, brawlers_info=None):
+        if not brawlers_info: brawlers_info = load_brawlers_info()
+        if skill_type == "attack":
+            return brawlers_info[brawler]['can_attack_through_walls']
+        elif skill_type == "super":
+            return brawlers_info[brawler]['super_can_attack_through_walls']
+        raise ValueError("skill_type must be either 'attack' or 'super'")
+
 
     @staticmethod
     def walls_are_in_line_of_sight(line_of_sight, walls):
@@ -249,14 +261,14 @@ class Play(Movement):
             # If no movement is possible, return empty string
             return preferred_movement
 
-    def is_enemy_hittable(self, player_pos, enemy_pos, walls):
-        if self.current_brawler in self.brawler_types['throwers']:
+    def is_enemy_hittable(self, player_pos, enemy_pos, walls, skill_type):
+        if self.can_attack_through_walls(self.current_brawler, skill_type, self.brawlers_info):
             return True
         if self.walls_are_in_line_of_sight(LineString([player_pos, enemy_pos]), walls):
             return False
         return True
 
-    def find_closest_enemy(self, enemy_data, player_coords, walls):
+    def find_closest_enemy(self, enemy_data, player_coords, walls, skill_type):
         player_pos_x, player_pos_y = player_coords
         closest_distance = float('inf')
         closest_hittable = None
@@ -264,7 +276,7 @@ class Play(Movement):
         for enemy in enemy_data:
             distance = self.get_distance(self.get_enemy_pos(enemy), player_coords)
             if distance < closest_distance:
-                if self.is_enemy_hittable((player_pos_x, player_pos_y), self.get_enemy_pos(enemy), walls):
+                if self.is_enemy_hittable((player_pos_x, player_pos_y), self.get_enemy_pos(enemy), walls, skill_type):
                     closest_hittable = [self.get_enemy_pos(enemy), distance]
                     continue
 
@@ -345,9 +357,7 @@ class Play(Movement):
         return self.brawler_ranges[brawler]
 
     def loop(self, brawler, data, current_time):
-        safe_range, attack_range = self.get_brawler_range(brawler)
-        movement = self.get_movement(player_data=data['player'][0], enemy_data=data['enemy'], safe_range=safe_range,
-                                     attack_range=attack_range, walls=data['wall'])
+        movement = self.get_movement(player_data=data['player'][0], enemy_data=data['enemy'], walls=data['wall'], brawler=brawler)
         current_time = time.time()
         if current_time - self.time_since_movement > self.minimum_movement_delay:
             movement = self.unstuck_movement_if_needed(movement, current_time)
@@ -411,11 +421,16 @@ class Play(Movement):
 
         return combined_walls
 
-    def get_movement(self, player_data, enemy_data, safe_range, attack_range, walls):
+    def get_movement(self, player_data, enemy_data, walls, brawler):
+        brawler_info = self.brawlers_info.get(brawler)
+        if not brawler_info:
+            raise ValueError(f"Brawler '{brawler}' not found in brawlers info.")
+        safe_range, attack_range, super_range = self.get_brawler_range(brawler)
+
         player_pos = self.get_player_pos(player_data)
         if not self.is_there_enemy(enemy_data):
             return self.no_enemy_movement(player_data, walls)
-        enemy_coords, enemy_distance = self.find_closest_enemy(enemy_data, player_pos, walls)
+        enemy_coords, enemy_distance = self.find_closest_enemy(enemy_data, player_pos, walls, "attack")
         direction_x = enemy_coords[0] - player_pos[0]
         direction_y = enemy_coords[1] - player_pos[1]
 
@@ -423,11 +438,9 @@ class Play(Movement):
         if enemy_distance > safe_range:  # Move towards the enemy
             move_horizontal = self.get_horizontal_move_key(direction_x)
             move_vertical = self.get_vertical_move_key(direction_y)
-            state = "towards"
         else:  # Move away from the enemy
             move_horizontal = self.get_horizontal_move_key(direction_x, opposite=True)
             move_vertical = self.get_vertical_move_key(direction_y, opposite=True)
-            state = "escape"
 
         movement_options = [move_horizontal + move_vertical]
         if self.game_mode == 3:
@@ -476,15 +489,22 @@ class Play(Movement):
                 self.use_hypercharge()
                 self.time_since_hypercharge_checked = time.time()
                 self.is_hypercharge_ready = False
-            if self.is_super_ready:
-                self.use_super()
-                self.time_since_super_checked = time.time()
-                self.is_super_ready = False
-            enemy_hittable = self.is_enemy_hittable(player_pos, enemy_coords, walls)
+            enemy_hittable = self.is_enemy_hittable(player_pos, enemy_coords, walls, "attack")
             # print("enemy hittable", enemy_hittable, "enemy_distance", enemy_distance)
             if enemy_hittable:
                 self.attack()
+        if self.is_super_ready:
+            super_type = brawler_info['super_type']
+            enemy_hittable = self.is_enemy_hittable(player_pos, enemy_coords, walls, "super")
 
+            if (enemy_hittable and
+                    (enemy_distance <= super_range
+                     or super_type in ["spawnable", "other"]
+                     or (brawler in ["stu", "surge"] and super_type == "charge" and enemy_distance <= super_range + attack_range)
+                    )):
+                self.use_super()
+                self.time_since_super_checked = time.time()
+                self.is_super_ready = False
         return movement
 
     def main(self, frame, brawler):

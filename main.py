@@ -20,7 +20,7 @@ from stage_manager import StageManager
 from state_finder.main import get_state
 from time_management import TimeManagement
 from utils import ScreenshotTaker, load_toml_as_dict, current_wall_model_is_latest, api_base_url
-from utils import get_brawler_list, update_missing_brawler_ranges, update_icons, check_version, async_notify_user, \
+from utils import get_brawler_list, update_missing_brawlers_info, update_icons, check_version, async_notify_user, \
     update_wall_model_classes, get_latest_wall_model_file, get_latest_version, cprint
 
 pyla_version = load_toml_as_dict("./cfg/general_config.toml")['pyla_version']
@@ -199,7 +199,7 @@ height_ratio = height / orig_screen_height
 
 all_brawlers = get_brawler_list()
 if api_base_url != "localhost":
-    update_missing_brawler_ranges(all_brawlers)
+    update_missing_brawlers_info(all_brawlers)
     update_icons()
     check_version()
     update_wall_model_classes()
