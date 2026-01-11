@@ -4,7 +4,7 @@ trophies_region_crop = [880, 160, 1000, 220]
 brawlers_btn = [130, 450]
 select_btn = [150, 950]
 brawl_stars_icon = [50, 50] # BRAWL STARS ICON WHEN BRAWL STARS CRASHES. SET MANUALLY
-trophy_observer = [60, 50, 450, 175]
+trophy_observer = [40, 30, 480, 200]
 [template_matching]
 # Regions which will be cropped and then template will be looked for
 # Example: powerpoint region will crop out an region in which powerpoints are visible inside the shop

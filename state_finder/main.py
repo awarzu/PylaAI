@@ -47,12 +47,12 @@ def is_template_in_region(image, template_path, region):
 
 def load_template(image_path, width, height):
     if not bot_plays_in_background:
-        width_ratio, height_ratio = width / orig_screen_width, height / orig_screen_height
+        current_width_ratio, current_height_ratio = width / orig_screen_width, height / orig_screen_height
     else:
-        width_ratio, height_ratio = width / 1774, height / 998
+        current_width_ratio, current_height_ratio = width / 1774, height / 998
     image = cv2.imread(image_path)
     orig_height, orig_width = image.shape[:2]
-    resized_image = cv2.resize(image, (int(orig_width * width_ratio), int(orig_height * height_ratio)))
+    resized_image = cv2.resize(image, (int(orig_width * current_width_ratio), int(orig_height * current_height_ratio)))
     return resized_image
 
 crop_region = load_toml_as_dict("./cfg/lobby_config.toml")['lobby']['trophy_observer']
@@ -91,7 +91,7 @@ def find_game_result(screenshot):
 
     _, text, conf = result[0]
     game_result, ratio = rework_game_result(text)
-    if ratio < 0.3:
+    if ratio < 0.55:
         print("Couldn't find game result", game_result, ratio)
         return False
     return True

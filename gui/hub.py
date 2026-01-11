@@ -642,7 +642,7 @@ class Hub:
             height=S(30)
         )
         background_cb.grid(row=row_idx, column=1, sticky="w", padx=S(20), pady=S(10))
-        bg_tip = "Allows Pyla to play even when it's not the active window (must not be minimized)\nWARNING : THIS IS EXPERIMENTAL AND HAS DISADVANTAGES \nAutomatic brawler selection does NOT work. Movement is jittery. Stardrop long pressing doesn't work."
+        bg_tip = "Allows Pyla to play even when it's not the active window (must not be minimized)\nWARNING : THIS REQUIRES ADB TO BE ENABLED.\ Do not try to move the character at the same time or it will break."
         self.attach_tooltip(lbl_background, bg_tip)
         self.attach_tooltip(background_cb, bg_tip)
 

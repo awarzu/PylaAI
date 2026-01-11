@@ -14,6 +14,7 @@ from PIL import Image
 from ppadb.client import Client as AdbClient
 
 orig_screen_width, orig_screen_height = 1920, 1080
+brawl_stars_width, brawl_stars_height = 1774, 998
 full_width, full_height = pyautogui.size()
 full_width_ratio = full_width / orig_screen_width
 full_height_ratio = full_height / orig_screen_height
@@ -61,11 +62,11 @@ class WindowController:
                 self.client_rect = win32gui.GetClientRect(self.hwnd_child)
                 self.width = self.client_rect[2] - self.client_rect[0]
                 self.height = self.client_rect[3] - self.client_rect[1]
-                self.width_ratio = self.width / 1774
-                self.height_ratio = self.height / 998
-                self.joystick_x, self.joystick_y = 220*self.width_ratio, 870*self.height_ratio
-                self.left_offset = 52*full_width_ratio
-                self.top_offset = 35*full_height_ratio
+                self.width_ratio = self.width / brawl_stars_width
+                self.height_ratio = self.height / brawl_stars_height
+                self.joystick_x, self.joystick_y = 220 * self.width_ratio, 870 * self.height_ratio
+                self.left_offset = 52 * full_width_ratio
+                self.top_offset = 35 * full_height_ratio
                 print(f"Window found: {window_name}")
                 self.setup = True
             except Exception as e:
@@ -76,26 +77,26 @@ class WindowController:
                 self.client = AdbClient(host="127.0.0.1", port=5037)
                 self.device = self.client.devices()[0]
                 print("ADB device connected")
-                self.input_dev="/dev/input/event2"
+                self.input_dev = "/dev/input/event2"
+                self.tracking_counter = 100
                 self.reset_all()
             except Exception as e:
                 raise ConnectionError(f"Error connecting to ADB device: {e}")
 
-
     def reset_all(self):
-        """Forces ALL 10 slots to lift. Clears 'Stuck ID' issues."""
-        print("Resetting ALL slots...")
-        cmds = []
-        for i in range(10):  # Clear slots 0 to 9
-            cmds.append(f"sendevent {self.input_dev} 3 47 {i}")  # ABS_MT_SLOT
-            cmds.append(f"sendevent {self.input_dev} 3 57 -1")  # Lift (TRACKING_ID -1)
+        if self.bot_plays_in_background:
+            cmds = []
+            for i in range(10):  # Clear slots 0 to 9
+                cmds.append(f"sendevent {self.input_dev} 3 47 {i}")
+                cmds.append(f"sendevent {self.input_dev} 3 57 -1")  # Lift
 
-        cmds.append(f"sendevent {self.input_dev} 1 330 0")  # BTN_TOUCH UP
-        cmds.append(f"sendevent {self.input_dev} 0 0 0")  # SYN_REPORT
-        self._send_batch(cmds)
-        print("resetted")
-        self.are_we_moving = False
-        self.active_fingers = 0
+            cmds.append(f"sendevent {self.input_dev} 1 330 0")  # BTN_TOUCH UP
+            cmds.append(f"sendevent {self.input_dev} 0 0 0")  # SYN_REPORT
+            self._send_batch(cmds)
+
+            # Force reset internal states
+            self.are_we_moving = False
+            self.active_fingers = 0
 
     def screenshot(self, array=False):
         hwnd_dc = win32gui.GetWindowDC(self.hwnd_child)
@@ -104,7 +105,7 @@ class WindowController:
         save_bitmap = win32ui.CreateBitmap()
         save_bitmap.CreateCompatibleBitmap(mfc_dc, self.width, self.height)
         save_dc.SelectObject(save_bitmap)
-        #save_dc.BitBlt((0, 0), (self.width, self.height), mfc_dc, (self.client_rect[0], self.client_rect[1]), win32con.SRCCOPY)
+        # save_dc.BitBlt((0, 0), (self.width, self.height), mfc_dc, (self.client_rect[0], self.client_rect[1]), win32con.SRCCOPY)
         result = ctypes.windll.user32.PrintWindow(self.hwnd_child, save_dc.GetSafeHdc(), 2)
 
         # If it fails, try with flag 0 (Default)
@@ -125,8 +126,6 @@ class WindowController:
         pil_image = Image.fromarray(img_array)
         return pil_image
 
-
-
     def _send_batch(self, commands):
         """
         Takes a list of command strings and executes them all at once.
@@ -137,9 +136,11 @@ class WindowController:
         self.device.shell(full_cmd)
 
     def touch_down(self, slot_id, x, y):
+        self.tracking_counter += 1  # Increment ID
+        if self.tracking_counter > 60000: self.tracking_counter = 100  # Reset if too high
         cmds = []
         cmds.append(f"sendevent {self.input_dev} 3 47 {slot_id}")  # Select Slot
-        cmds.append(f"sendevent {self.input_dev} 3 57 {slot_id + 100}")  # Assign ID
+        cmds.append(f"sendevent {self.input_dev} 3 57 {self.tracking_counter}")  # Assign ID
 
         # Only send BTN_TOUCH DOWN if this is the FIRST finger
         if self.active_fingers == 0:
@@ -181,16 +182,15 @@ class WindowController:
 
         self._send_batch(cmds)
 
-
     def keys_up(self, keys: List[str]):
         if not self.bot_plays_in_background:
             for key in keys:
                 pyautogui.keyUp(key)
         else:
             if "".join(keys) == "wasd":
-                self.touch_up(0)
-                self.are_we_moving = False
-                #self.reset_all()
+                if self.are_we_moving:
+                    self.touch_up(0)
+                    self.are_we_moving = False
 
     def keys_down(self, keys: List[str]):
         if not self.bot_plays_in_background:
@@ -217,9 +217,8 @@ class WindowController:
                 raise ValueError("Trying to press an unregistered key")
             x, y = key_coords_dict[key]
             self.touch_down(1, x * self.width_ratio, y * self.height_ratio)
-            sleep(delay)
+            time.sleep(delay)
             self.touch_up(1)
-
 
     def click(self, x: int, y: int, delay=0.05, already_include_ratio=True):
         if not self.bot_plays_in_background:
@@ -228,12 +227,8 @@ class WindowController:
                 y = y * full_height_ratio
             pyautogui.click(x, y)
         else:
-            self.touch_down(1,  x * self.width_ratio, y * self.height_ratio)
-            print(f"Clicked at: {x * self.width_ratio}, {y * self.height_ratio}")
-            print(f"Original coords: {x}, {y}")
-            print(f"Ratios: {self.width_ratio}, {self.height_ratio}")
-            print(f"Offsets: {self.left_offset}, {self.top_offset}")
-            sleep(delay)
+            self.touch_down(1, x * self.width_ratio, y * self.height_ratio)
+            time.sleep(delay)
             self.touch_up(1)
 
     def swipe(self, start_x, start_y, end_x, end_y, duration=0.2):

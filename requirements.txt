@@ -11,9 +11,9 @@ toml
 torch
 pillow
 discord.py
-onnxtr
 shapely
 ultralytics
 bettercam
 packaging
 pywin32
+pure-python-adb

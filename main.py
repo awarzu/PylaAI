@@ -213,6 +213,7 @@ if width > 1920:
 orig_screen_width, orig_screen_height = 1920, 1080
 width_ratio = width / orig_screen_width
 height_ratio = height / orig_screen_height
+scale_factor = min(width_ratio, height_ratio)
 
 all_brawlers = get_brawler_list()
 if api_base_url != "localhost":
@@ -221,8 +222,7 @@ if api_base_url != "localhost":
     check_version()
     update_wall_model_classes()
     if not current_wall_model_is_latest():
-        print(
-            "New Wall detection model found, downloading... (this might take a few minutes depending on your internet speed)")
+        print("New Wall detection model found, downloading... (this might take a few minutes depending on your internet speed)")
         get_latest_wall_model_file()
 
 # check if the zoom is 100%
@@ -233,6 +233,5 @@ if dpi_scale != 96:
     print("⚠️⚠️⚠️ Warning ⚠️⚠️⚠️\nScreen's zoom isn't 100%. \nPlease change your Zoom to 100% in your windows settings (just above the display resolution). \nOtherwise there will be unexpected problems (don't hesitate to ask for support in the discord server.")
 
 # Use the smaller ratio to maintain aspect ratio
-scale_factor = min(width_ratio, height_ratio)
 app = App(login, SelectBrawler, pyla_main, all_brawlers, Hub)
 app.start(pyla_version, get_latest_version)
