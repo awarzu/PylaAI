@@ -140,10 +140,6 @@ def pyla_main(data):
         def main(self): #this is for timer to stop after time
             s_time = time.time()
             c = 0
-            import cProfile
-            profiler = cProfile.Profile()
-            profiler.enable()
-            i = 0
             while True:
 
                 if self.run_for_minutes > 0 and not self.in_cooldown:
@@ -186,10 +182,6 @@ def pyla_main(data):
                     elapsed_time = time.time() - s_time
                     if elapsed_time < time_per_frame:
                         time.sleep(time_per_frame - elapsed_time)
-                if i > 1000:
-                    profiler.disable()
-                    profiler.print_stats(sort='tottime')
-                    exit()
 
     if current_emulator != "Others":
         try:
