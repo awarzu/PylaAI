@@ -1,7 +1,7 @@
+import atexit
 import ctypes
+import math
 import time
-from time import sleep
-from typing import List
 import cv2
 import numpy as np
 import win32gui
@@ -9,17 +9,15 @@ import win32con
 import win32ui
 import pyautogui
 from PIL import Image
-from ppadb.client import Client as AdbClient
+from typing import List
 
-import utils
+# New libraries
+import scrcpy
+from adbutils import adb
 
+# --- Configuration ---
 orig_screen_width, orig_screen_height = 1920, 1080
 brawl_stars_width, brawl_stars_height = 1774, 998
-full_width, full_height = pyautogui.size()
-full_width_ratio = full_width / orig_screen_width
-full_height_ratio = full_height / orig_screen_height
-left_offset = 52 * full_width_ratio
-top_offset = 35 * full_height_ratio
 
 key_coords_dict = {
     "H": (1400, 970),
@@ -36,55 +34,14 @@ directions_xy_deltas_dict = {
     "d": (100, 0),
 }
 
-
-
 def find_window_by_substring(substring):
     hwnd_list = []
-
     def callback(hwnd, extra):
         title = win32gui.GetWindowText(hwnd)
         if substring.lower() in title.lower() and win32gui.IsWindowVisible(hwnd):
             hwnd_list.append(hwnd)
-
     win32gui.EnumWindows(callback, None)
     return hwnd_list[0] if hwnd_list else None
-
-
-def connect_to_emulator():
-    # Connect to the ADB Server (always 5037)
-    client = AdbClient(host="127.0.0.1", port=5037)
-    known_ports = [5555, 7555, 16384, 21503]
-
-    devices = client.devices()
-
-    # 2. If no devices, try connecting to known ports
-    if len(devices) == 0:
-        print("No devices found. Attempting to connect to common emulator ports...")
-        for port in known_ports:
-            try:
-                client.remote_connect("127.0.0.1", port)
-            except:
-                continue
-
-        # Refresh device list
-        devices = client.devices()
-
-    # 3. If STILL no devices, ask the user (Critical for BlueStacks 5)
-    if len(devices) == 0:
-        print("\nCould not auto-detect emulator.")
-        print("If using BlueStacks 5, go to Settings > Advanced > ADB to see the port.")
-        user_port = input("Please enter your emulator's ADB port (e.g., 5635): ")
-        try:
-            client.remote_connect("127.0.0.1", int(user_port))
-            devices = client.devices()
-        except Exception as e:
-            print(f"Failed to connect: {e}")
-
-    # Final Check
-    if len(devices) == 0:
-        raise ConnectionError("No ADB devices connected. Is the emulator running?")
-
-    return client, devices[0]
 
 class WindowController:
     def __init__(self, window_name: str, camera, bot_plays_in_background: bool = False):
@@ -108,30 +65,44 @@ class WindowController:
                 self.setup = True
             except Exception as e:
                 raise ValueError(f"Error finding window '{window_name}': {e}")
-
+        # --- 2. ADB & Scrcpy Connection ---
+        print("Connecting to ADB...")
         try:
-            self.client, self.device = connect_to_emulator()
-            print("ADB device connected")
-            self.input_dev = "/dev/input/event2"
-            self.tracking_counter = 100
-            self.reset_all()
+            # Connect to device (adbutils automatically handles port detection mostly)
+            # If you specifically need the BlueStacks port logic, we can re-add it,
+            # but adbutils is usually smarter at finding the open device.
+            device_list = adb.device_list()
+            if not device_list:
+                # Try connecting to common ports if empty
+                for port in [5555, 5037, 16384, 5635]:
+                    try:
+                         adb.connect(f"127.0.0.1:{port}")
+                    except:
+                         pass
+                device_list = adb.device_list()
+
+            if not device_list:
+                 raise ConnectionError("No ADB devices found.")
+
+            self.device = device_list[0]
+            print(f"Connected to device: {self.device.serial}")
+
+            # Initialize Scrcpy
+            # max_width=0 disables video stream (saves performance since you use Win32 for video)
+            self.scrcpy_client = scrcpy.Client(device=self.device, max_width=0)
+
+            # Start the client in a separate thread
+            self.scrcpy_client.start(threaded=True)
+            atexit.register(self.close)
+            print("Scrcpy client started successfully.")
+
         except Exception as e:
-            raise ConnectionError(f"Error connecting to ADB device:\n please make sure ADB is enabled on your emulator and restart it and Pyla \n {e}")
-
-
-    def reset_all(self):
-        cmds = []
-        for i in range(10):  # Clear slots 0 to 9
-            cmds.append(f"sendevent {self.input_dev} 3 47 {i}")
-            cmds.append(f"sendevent {self.input_dev} 3 57 -1")  # Lift
-
-        cmds.append(f"sendevent {self.input_dev} 1 330 0")  # BTN_TOUCH UP
-        cmds.append(f"sendevent {self.input_dev} 0 0 0")  # SYN_REPORT
-        self._send_batch(cmds)
-
-        # Force reset internal states
+            raise ConnectionError(f"Failed to initialize Scrcpy: {e}")
         self.are_we_moving = False
-        self.active_fingers = 0
+        self.PID_JOYSTICK = 1  # ID for WASD movement
+        self.PID_ATTACK = 2  # ID for clicks/attacks
+
+
 
     def game_screenshot(self, array=False):
         hwnd_dc = win32gui.GetWindowDC(self.hwnd_child)
@@ -191,71 +162,27 @@ class WindowController:
             return self.full_screenshot()
         return self.game_screenshot()
 
-    def _send_batch(self, commands):
-        """
-        Takes a list of command strings and executes them all at once.
-        This is MUCH faster than sending them one by one.
-        """
-        # Join all commands with ";" to run them sequentially in one shell instance
-        full_cmd = ";".join(commands)
-        self.device.shell(full_cmd)
+    def touch_down(self, x, y, pointer_id=0):
+        # We explicitly pass the pointer_id
+        self.scrcpy_client.control.touch(int(x), int(y), scrcpy.ACTION_DOWN, pointer_id)
 
-    def touch_down(self, slot_id, x, y):
-        self.tracking_counter += 1  # Increment ID
-        if self.tracking_counter > 60000: self.tracking_counter = 100  # Reset if too high
-        cmds = []
-        cmds.append(f"sendevent {self.input_dev} 3 47 {slot_id}")  # Select Slot
-        cmds.append(f"sendevent {self.input_dev} 3 57 {self.tracking_counter}")  # Assign ID
+    def touch_move(self, x, y, pointer_id=0):
+        self.scrcpy_client.control.touch(int(x), int(y), scrcpy.ACTION_MOVE, pointer_id)
 
-        # Only send BTN_TOUCH DOWN if this is the FIRST finger
-        if self.active_fingers == 0:
-            cmds.append(f"sendevent {self.input_dev} 1 330 1")
-
-        cmds.append(f"sendevent {self.input_dev} 3 53 {int(x)}")  # Set X
-        cmds.append(f"sendevent {self.input_dev} 3 54 {int(y)}")  # Set Y
-
-        cmds.append(f"sendevent {self.input_dev} 3 58 50")  # Pressure
-        cmds.append(f"sendevent {self.input_dev} 3 48 5")
-        cmds.append(f"sendevent {self.input_dev} 0 0 0")  # SYN_REPORT
-
-        self.active_fingers += 1
-        self._send_batch(cmds)
-
-    def touch_move(self, slot_id, x, y):
-        cmds = []
-        cmds.append(f"sendevent {self.input_dev} 3 47 {slot_id}")  # Select Slot
-        cmds.append(f"sendevent {self.input_dev} 3 53 {x}")  # Update X
-        cmds.append(f"sendevent {self.input_dev} 3 54 {y}")  # Update Y
-        cmds.append(f"sendevent {self.input_dev} 3 58 50")
-        cmds.append(f"sendevent {self.input_dev} 0 0 0")  # SYN_REPORT
-
-        self._send_batch(cmds)
-
-    def touch_up(self, slot_id):
-        cmds = []
-        cmds.append(f"sendevent {self.input_dev} 3 47 {slot_id}")  # Select Slot
-        cmds.append(f"sendevent {self.input_dev} 3 57 -1")  # Reset ID (-1)
-
-        self.active_fingers -= 1
-
-        # Only send BTN_TOUCH UP if this was the LAST finger
-        if self.active_fingers <= 0:
-            self.active_fingers = 0  # Safety reset
-            cmds.append(f"sendevent {self.input_dev} 1 330 0")
-
-        cmds.append(f"sendevent {self.input_dev} 0 0 0")  # SYN_REPORT
-
-        self._send_batch(cmds)
+    def touch_up(self, x, y, pointer_id=0):
+        self.scrcpy_client.control.touch(int(x), int(y), scrcpy.ACTION_UP, pointer_id)
 
     def keys_up(self, keys: List[str]):
         if "".join(keys) == "wasd":
             if self.are_we_moving:
-                self.touch_up(0)
+                # Use PID_JOYSTICK so we don't lift the attack finger
+                self.touch_up(self.joystick_x, self.joystick_y, pointer_id=self.PID_JOYSTICK)
                 self.are_we_moving = False
 
     def keys_down(self, keys: List[str]):
+        # Use PID_JOYSTICK for all movement actions
         if not self.are_we_moving:
-            self.touch_down(0, self.joystick_x, self.joystick_y)
+            self.touch_down(self.joystick_x, self.joystick_y, pointer_id=self.PID_JOYSTICK)
             self.are_we_moving = True
 
         delta_x, delta_y = 0, 0
@@ -264,27 +191,61 @@ class WindowController:
                 dx, dy = directions_xy_deltas_dict[key]
                 delta_x += dx
                 delta_y += dy
-        self.touch_move(0, self.joystick_x + delta_x, self.joystick_y + delta_y)
+
+        self.touch_move(self.joystick_x + delta_x, self.joystick_y + delta_y, pointer_id=self.PID_JOYSTICK)
+
+    def click(self, x: int, y: int, delay=0.05, already_include_ratio=True):
+        if not already_include_ratio:
+            x = x * self.width_ratio
+            y = y * self.height_ratio
+        # Use PID_ATTACK for clicks so we don't interrupt movement
+        self.touch_down(x, y, pointer_id=self.PID_ATTACK)
+        time.sleep(delay)
+        self.touch_up(x, y, pointer_id=self.PID_ATTACK)
 
     def press_key(self, key, delay=0.05):
         if key not in key_coords_dict:
-            raise ValueError("Trying to press an unregistered key")
+            return
         x, y = key_coords_dict[key]
-        self.touch_down(1, x * self.width_ratio, y * self.height_ratio)
-        time.sleep(delay)
-        self.touch_up(1)
-
-    def click(self, x: int, y: int, delay=0.05, already_include_ratio=True):
-        self.touch_down(1, x * self.width_ratio, y * self.height_ratio)
-        time.sleep(delay)
-        self.touch_up(1)
-
+        target_x = x * self.width_ratio
+        target_y = y * self.height_ratio
+        self.click(target_x, target_y, delay)
 
     def swipe(self, start_x, start_y, end_x, end_y, duration=0.2):
-        self.touch_down(1, start_x * self.width_ratio, start_y * self.height_ratio)
-        time.sleep(0.05)
-        self.touch_move(1, end_x * self.width_ratio, end_y * self.height_ratio)
-        self.touch_up(1)
+        # FIX for TypeError: ControlSender.swipe()
+        # We calculate the step length and delay to match your requested duration
 
+        # 1. Calculate distance
+        dist_x = end_x - start_x
+        dist_y = end_y - start_y
+        distance = math.sqrt(dist_x ** 2 + dist_y ** 2)
 
+        if distance == 0:
+            return
 
+        # 2. Set a reasonable step size (in pixels). Larger = faster/choppier.
+        step_len = 25
+
+        # 3. Calculate how many steps we need
+        steps = distance / step_len
+
+        # 4. Calculate delay per step to achieve total duration
+        # duration = steps * delay  =>  delay = duration / steps
+        if steps > 0:
+            step_delay = duration / steps
+        else:
+            step_delay = 0.005  # Default safety
+
+        # 5. Call scrcpy swipe with the correct arguments
+        self.scrcpy_client.control.swipe(
+            start_x=start_x,
+            start_y=start_y,
+            end_x=end_x,
+            end_y=end_y,
+            # move_step_length=int(step_len),
+            # move_steps_delay=step_delay
+        )
+
+    def close(self):
+        if hasattr(self, 'scrcpy_client'):
+            self.scrcpy_client.stop()
