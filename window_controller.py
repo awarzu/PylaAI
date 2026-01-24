@@ -11,6 +11,8 @@ import pyautogui
 from PIL import Image
 from ppadb.client import Client as AdbClient
 
+import utils
+
 orig_screen_width, orig_screen_height = 1920, 1080
 brawl_stars_width, brawl_stars_height = 1774, 998
 full_width, full_height = pyautogui.size()
@@ -48,6 +50,42 @@ def find_window_by_substring(substring):
     return hwnd_list[0] if hwnd_list else None
 
 
+def connect_to_emulator():
+    # Connect to the ADB Server (always 5037)
+    client = AdbClient(host="127.0.0.1", port=5037)
+    known_ports = [5555, 7555, 16384, 21503]
+
+    devices = client.devices()
+
+    # 2. If no devices, try connecting to known ports
+    if len(devices) == 0:
+        print("No devices found. Attempting to connect to common emulator ports...")
+        for port in known_ports:
+            try:
+                client.remote_connect("127.0.0.1", port)
+            except:
+                continue
+
+        # Refresh device list
+        devices = client.devices()
+
+    # 3. If STILL no devices, ask the user (Critical for BlueStacks 5)
+    if len(devices) == 0:
+        print("\nCould not auto-detect emulator.")
+        print("If using BlueStacks 5, go to Settings > Advanced > ADB to see the port.")
+        user_port = input("Please enter your emulator's ADB port (e.g., 5635): ")
+        try:
+            client.remote_connect("127.0.0.1", int(user_port))
+            devices = client.devices()
+        except Exception as e:
+            print(f"Failed to connect: {e}")
+
+    # Final Check
+    if len(devices) == 0:
+        raise ConnectionError("No ADB devices connected. Is the emulator running?")
+
+    return client, devices[0]
+
 class WindowController:
     def __init__(self, window_name: str, camera, bot_plays_in_background: bool = False):
         self.bot_plays_in_background = bot_plays_in_background
@@ -72,8 +110,7 @@ class WindowController:
                 raise ValueError(f"Error finding window '{window_name}': {e}")
 
         try:
-            self.client = AdbClient(host="127.0.0.1", port=5037)
-            self.device = self.client.devices()[0]
+            self.client, self.device = connect_to_emulator()
             print("ADB device connected")
             self.input_dev = "/dev/input/event2"
             self.tracking_counter = 100

@@ -19,4 +19,3 @@ pywin32
 pure-python-adb
 google-play-scraper~=1.2.7
 easyocr~=1.7.2
-onnxtr~=0.8.0
