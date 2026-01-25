@@ -23,12 +23,6 @@ class TimeManagement:
     def no_detections_check(self):
         return self.check_time('no_detections')
 
-    def specific_brawlers_check(self):
-        result = self.check_time('specific_brawlers')
-        if result:
-            return True
-        return False
-
     def idle_check(self):
         return self.check_time("idle")
 

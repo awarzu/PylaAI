@@ -1,6 +1,7 @@
 import atexit
 import ctypes
 import math
+import threading
 import time
 import cv2
 import numpy as np
@@ -16,15 +17,14 @@ import scrcpy
 from adbutils import adb
 
 # --- Configuration ---
-orig_screen_width, orig_screen_height = 1920, 1080
-brawl_stars_width, brawl_stars_height = 1774, 998
+brawl_stars_width, brawl_stars_height = 1920, 1080
 
 key_coords_dict = {
-    "H": (1400, 970),
-    "G": (1615, 970),
-    "M": (1700, 810),
+    "H": (1400, 990),
+    "G": (1640, 990),
+    "M": (1725, 800),
     "Q": (1740, 1000),
-    "E": (1540, 890)
+    "E": (1510, 880)
 }
 
 directions_xy_deltas_dict = {
@@ -34,42 +34,18 @@ directions_xy_deltas_dict = {
     "d": (100, 0),
 }
 
-def find_window_by_substring(substring):
-    hwnd_list = []
-    def callback(hwnd, extra):
-        title = win32gui.GetWindowText(hwnd)
-        if substring.lower() in title.lower() and win32gui.IsWindowVisible(hwnd):
-            hwnd_list.append(hwnd)
-    win32gui.EnumWindows(callback, None)
-    return hwnd_list[0] if hwnd_list else None
-
 class WindowController:
-    def __init__(self, window_name: str, camera, bot_plays_in_background: bool = False):
-        self.bot_plays_in_background = bot_plays_in_background
-        self.camera = camera
-        if window_name == "Others":
-            self.bot_plays_in_background = False
-            self.setup = False
-        else:
-            try:
-                self.hwnd_main = find_window_by_substring(window_name)
-                self.hwnd_child = win32gui.GetWindow(self.hwnd_main, win32con.GW_CHILD)
-                self.current_screen = win32gui.GetWindowRect(self.hwnd_child)
-                self.client_rect = win32gui.GetClientRect(self.hwnd_child)
-                self.width = self.client_rect[2] - self.client_rect[0]
-                self.height = self.client_rect[3] - self.client_rect[1]
-                self.width_ratio = self.width / brawl_stars_width
-                self.height_ratio = self.height / brawl_stars_height
-                self.joystick_x, self.joystick_y = 220 * self.width_ratio, 870 * self.height_ratio
-                print(f"Window found: {window_name}")
-                self.setup = True
-            except Exception as e:
-                raise ValueError(f"Error finding window '{window_name}': {e}")
+    def __init__(self):
+        self.scale_factor = None
+        self.width = None
+        self.height = None
+        self.width_ratio = None
+        self.height_ratio = None
+        self.joystick_x, self.joystick_y = None, None
         # --- 2. ADB & Scrcpy Connection ---
         print("Connecting to ADB...")
         try:
             # Connect to device (adbutils automatically handles port detection mostly)
-            # If you specifically need the BlueStacks port logic, we can re-add it,
             # but adbutils is usually smarter at finding the open device.
             device_list = adb.device_list()
             if not device_list:
@@ -87,11 +63,19 @@ class WindowController:
             self.device = device_list[0]
             print(f"Connected to device: {self.device.serial}")
 
-            # Initialize Scrcpy
-            # max_width=0 disables video stream (saves performance since you use Win32 for video)
+            self.frame_lock = threading.Lock()
             self.scrcpy_client = scrcpy.Client(device=self.device, max_width=0)
+            self.last_frame = None
+            self.last_joystick_pos = (None, None)
 
-            # Start the client in a separate thread
+            def on_frame(frame):
+                # frame is a numpy array
+                if frame is not None:
+                    # 3. Acquire lock before WRITING
+                    with self.frame_lock:
+                        self.last_frame = frame
+
+            self.scrcpy_client.add_listener(scrcpy.EVENT_FRAME, on_frame)
             self.scrcpy_client.start(threaded=True)
             atexit.register(self.close)
             print("Scrcpy client started successfully.")
@@ -102,64 +86,41 @@ class WindowController:
         self.PID_JOYSTICK = 1  # ID for WASD movement
         self.PID_ATTACK = 2  # ID for clicks/attacks
 
+    def get_latest_frame(self):
+        """
+        Safely retrieves the latest frame.
+        Returns None if no frame is available yet.
+        """
+        # 4. Acquire lock before READING
+        with self.frame_lock:
+            if self.last_frame is None:
+                return None
+            # 5. VERY IMPORTANT: Return a .copy()
+            # the memory while we are analyzing it.
+            return self.last_frame.copy()
+
+    def screenshot(self, array=False):
+        frame = self.get_latest_frame()
+
+        while frame is None:
+            print("Waiting for first frame...")
+            time.sleep(0.1)
+            frame = self.get_latest_frame()
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        if not self.width or not self.height:
+            self.width = frame.shape[1]
+            self.height = frame.shape[0]
+            self.width_ratio = self.width / brawl_stars_width
+            self.height_ratio = self.height / brawl_stars_height
+            self.joystick_x, self.joystick_y = 220 * self.width_ratio, 870 * self.height_ratio
+            self.scale_factor = min(self.width_ratio, self.height_ratio)
 
 
-    def game_screenshot(self, array=False):
-        hwnd_dc = win32gui.GetWindowDC(self.hwnd_child)
-        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-        save_dc = mfc_dc.CreateCompatibleDC()
-        save_bitmap = win32ui.CreateBitmap()
-        save_bitmap.CreateCompatibleBitmap(mfc_dc, self.width, self.height)
-        save_dc.SelectObject(save_bitmap)
-        # save_dc.BitBlt((0, 0), (self.width, self.height), mfc_dc, (self.client_rect[0], self.client_rect[1]), win32con.SRCCOPY)
-        result = ctypes.windll.user32.PrintWindow(self.hwnd_child, save_dc.GetSafeHdc(), 2)
-
-        # If it fails, try with flag 0 (Default)
-        if result == 0:
-            ctypes.windll.user32.PrintWindow(self.hwnd_child, save_dc.GetSafeHdc(), 0)
-        bmp_info = save_bitmap.GetInfo()
-        bmp_str = save_bitmap.GetBitmapBits(True)
-        img_array = np.frombuffer(bmp_str, np.uint8).reshape(bmp_info['bmHeight'], bmp_info['bmWidth'], 4)
-        img_array = cv2.cvtColor(img_array, cv2.COLOR_BGRA2RGB)
-
-        win32gui.DeleteObject(save_bitmap.GetHandle())
-        save_dc.DeleteDC()
-        mfc_dc.DeleteDC()
-        win32gui.ReleaseDC(self.hwnd_child, hwnd_dc)
 
         if array:
-            return img_array
+            return frame_rgb
 
-        return Image.fromarray(img_array)
-
-    def full_screenshot(self):
-        try:
-            image = self.camera.grab()
-        except Exception as e:
-            print(f"Error capturing screenshot: {e}")
-            image = None
-        if image is not None:
-            image = Image.fromarray(image)
-        c = 0
-        while image is None and c < 5:
-            try:
-                image = self.camera.grab()
-                if image is not None:
-                    image = Image.fromarray(image)
-            except Exception as e:
-                print(f"Error capturing screenshot: {e}")
-                image = None
-                c += 1
-                time.sleep(0.1)
-        if image is None:
-            print("Using pyautogui as backup for screenshotting as the main failed")
-            image = pyautogui.screenshot()
-        return image
-
-    def screenshot(self):
-        if not self.setup or not self.bot_plays_in_background:
-            return self.full_screenshot()
-        return self.game_screenshot()
+        return Image.fromarray(frame_rgb)
 
     def touch_down(self, x, y, pointer_id=0):
         # We explicitly pass the pointer_id
@@ -172,17 +133,14 @@ class WindowController:
         self.scrcpy_client.control.touch(int(x), int(y), scrcpy.ACTION_UP, pointer_id)
 
     def keys_up(self, keys: List[str]):
-        if "".join(keys) == "wasd":
+        if "".join(keys).lower() == "wasd":
             if self.are_we_moving:
                 # Use PID_JOYSTICK so we don't lift the attack finger
                 self.touch_up(self.joystick_x, self.joystick_y, pointer_id=self.PID_JOYSTICK)
                 self.are_we_moving = False
+                self.last_joystick_pos = (None, None)
 
     def keys_down(self, keys: List[str]):
-        # Use PID_JOYSTICK for all movement actions
-        if not self.are_we_moving:
-            self.touch_down(self.joystick_x, self.joystick_y, pointer_id=self.PID_JOYSTICK)
-            self.are_we_moving = True
 
         delta_x, delta_y = 0, 0
         for key in keys:
@@ -191,7 +149,14 @@ class WindowController:
                 delta_x += dx
                 delta_y += dy
 
-        self.touch_move(self.joystick_x + delta_x, self.joystick_y + delta_y, pointer_id=self.PID_JOYSTICK)
+        if not self.are_we_moving:
+            self.touch_down(self.joystick_x, self.joystick_y, pointer_id=self.PID_JOYSTICK)
+            self.are_we_moving = True
+            self.last_joystick_pos = (self.joystick_x + delta_x, self.joystick_y + delta_y)
+
+        if self.last_joystick_pos != (self.joystick_x + delta_x, self.joystick_y + delta_y):
+            self.touch_move(self.joystick_x + delta_x, self.joystick_y + delta_y, pointer_id=self.PID_JOYSTICK)
+            self.last_joystick_pos = (self.joystick_x + delta_x, self.joystick_y + delta_y)
 
     def click(self, x: int, y: int, delay=0.05, already_include_ratio=True):
         if not already_include_ratio:

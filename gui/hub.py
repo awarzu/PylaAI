@@ -16,7 +16,6 @@ width, height = pyautogui.size()
 width_ratio = width / orig_screen_width
 height_ratio = height / orig_screen_height
 scale_factor = min(width_ratio, height_ratio)
-monitors = [str(e) for e in list(range(len(bettercam.__factory.outputs)))]
 
 
 def S(value):
@@ -61,25 +60,26 @@ class Hub:
         self.bot_config.setdefault("gamemode", "brawlball")
         self.bot_config.setdefault("bot_uses_gadgets", "yes")
         self.bot_config.setdefault("minimum_movement_delay", 0.4)
+        self.bot_config.setdefault("wall_detection_confidence", 0.9)
+        self.bot_config.setdefault("entity_detection_confidence", 0.6)
+        self.bot_config.setdefault("unstuck_movement_delay", 3.0)
+        self.bot_config.setdefault("unstuck_movement_hold_time", 1.5)
+
 
         # Time thresholds defaults
         self.time_tresholds.setdefault("state_check", 3)
         self.time_tresholds.setdefault("no_detections", 10)
         self.time_tresholds.setdefault("idle", 10)
-        self.time_tresholds.setdefault("specific_brawlers", 999)
         self.time_tresholds.setdefault("super", 0.1)
         self.time_tresholds.setdefault("gadget", 0.5)
         self.time_tresholds.setdefault("hypercharge", 2)
 
         # General config defaults
-        self.general_config.setdefault("check_if_brawl_stars_crashed", "yes")
         self.general_config.setdefault("max_ips", "auto")
         self.general_config.setdefault("super_debug", "yes")
         self.general_config.setdefault("cpu_or_gpu", "auto")
-        self.general_config.setdefault("monitor", "0")
         self.general_config.setdefault("long_press_star_drop", "no")
         self.general_config.setdefault("trophies_multiplier", 1.0)
-        self.general_config.setdefault("bot_plays_in_background", "no")
         self.general_config.setdefault("current_emulator", "LDPlayer")
 
         # -----------------------------------------------------------------------------------------
@@ -450,12 +450,6 @@ class Hub:
 
         def handle_emulator_choice(choice):
             self.emu_var.set(choice)
-            if choice in ["BlueStacks", "MEmu", "Others"]:
-                self.general_config["check_if_brawl_stars_crashed"] = "no"
-            else:
-                # If user selects LDPlayer, we can keep crash detection as is or set it to "yes"
-                # (Comment out if you want it unchanged)
-                self.general_config["check_if_brawl_stars_crashed"] = "yes"
             if choice == "BlueStacks":
                 self.general_config["current_emulator"] = "BlueStacks"
             elif choice == "LDPlayer":
@@ -646,32 +640,6 @@ class Hub:
 
             row_idx += 1
 
-        lbl_background = ctk.CTkLabel(container, text="Background :", font=("Arial", S(18)))
-        lbl_background.grid(row=row_idx, column=0, sticky="e", padx=S(20), pady=S(10))
-        background_var = tk.BooleanVar(
-            value=(str(self.general_config["bot_plays_in_background"]).lower() in ["yes", "true"])
-        )
-
-        def toggle_background():
-            self.general_config["bot_plays_in_background"] = "yes" if background_var.get() else "no"
-            save_dict_as_toml(self.general_config, self.general_config_path)
-
-        background_cb = ctk.CTkCheckBox(
-            container,
-            text="",
-            variable=background_var,
-            command=toggle_background,
-            fg_color="#AA2A2A",
-            hover_color="#BB3A3A",
-            width=S(30),
-            height=S(30)
-        )
-        background_cb.grid(row=row_idx, column=1, sticky="w", padx=S(20), pady=S(10))
-        bg_tip = "Allows Pyla to play even when it's not the active window (must not be minimized)\nWARNING : THIS REQUIRES ADB TO BE ENABLED.\ Do not try to move the character at the same time or it will break."
-        self.attach_tooltip(lbl_background, bg_tip)
-        self.attach_tooltip(background_cb, bg_tip)
-
-        row_idx += 1
 
         # 6) Minimum Movement Delay (bot_config)
         create_labeled_entry(
@@ -691,6 +659,15 @@ class Hub:
             tooltip_text="On a scale between 0 and 1, how sure must the bot be to detect a wall  (lower means it can detect more things but increases false detections and mistakes)."
         )
 
+        # 9) Wall Detection Confidence (bot_config)
+        create_labeled_entry(
+            label_text="Player/Enemy Detection Confidence:",
+            config_key="entity_detection_confidence",
+            convert_func=float,
+            use_general_config=False,
+            tooltip_text="On a scale between 0 and 1, how sure must the bot be to detect the player/enemies/allies. (lower means it can detect more things but increases false detections and mistakes)."
+        )
+
         # 7) Unstuck Movement Delay (bot_config)
         create_labeled_entry(
             label_text="Unstuck Movement Delay:",
@@ -708,32 +685,6 @@ class Hub:
             use_general_config=False,
             tooltip_text="For how long (in seconds) will the bot try to go in a different position to unstuck itself before going back to normal."
         )
-
-        if len(monitors) > 1:
-            lbl_monitor = ctk.CTkLabel(container, text="Monitor (0=primary)", font=("Arial", S(18)))
-            lbl_monitor.grid(row=row_idx, column=0, sticky="e", padx=S(20), pady=S(10))
-
-            monitor_values = monitors
-            monitor_var = tk.StringVar(value=self.general_config["monitor"])
-
-            def on_monitor_change(choice):
-                self.general_config["monitor"] = choice
-                save_dict_as_toml(self.general_config, self.general_config_path)
-
-            monitor_menu = ctk.CTkOptionMenu(
-                container,
-                values=monitor_values,
-                command=on_monitor_change,
-                variable=monitor_var,
-                font=("Arial", S(16)),
-                fg_color="#AA2A2A",
-                button_color="#AA2A2A",
-                button_hover_color="#BB3A3A",
-                width=S(100),
-                height=S(35)
-            )
-            monitor_menu.grid(row=row_idx, column=1, padx=S(20), pady=S(10), sticky="w")
-            row_idx += 1
 
         # 4) CPU/GPU (store in general_config)
         lbl_gpu = ctk.CTkLabel(container, text="Use GPU (CPU/Auto):", font=("Arial", S(18)))
@@ -784,29 +735,6 @@ class Hub:
         long_press_cb.grid(row=row_idx, column=1, sticky="w", padx=S(20), pady=S(10))
         row_idx += 1
 
-        # 5) Brawl Stars Crash Detection (store in general_config)
-        lbl_crash = ctk.CTkLabel(container, text="Brawl Stars Crash Detection:", font=("Arial", S(18)))
-        lbl_crash.grid(row=row_idx, column=0, sticky="e", padx=S(20), pady=S(10))
-        crash_var = tk.BooleanVar(
-            value=(str(self.general_config["check_if_brawl_stars_crashed"]).lower() in ["yes", "true"])
-        )
-
-        def toggle_crash_detection():
-            self.general_config["check_if_brawl_stars_crashed"] = "yes" if crash_var.get() else "no"
-            save_dict_as_toml(self.general_config, self.general_config_path)
-
-        crash_cb = ctk.CTkCheckBox(
-            container,
-            text="",
-            variable=crash_var,
-            command=toggle_crash_detection,
-            fg_color="#AA2A2A",
-            hover_color="#BB3A3A",
-            width=S(30),
-            height=S(30)
-        )
-        crash_cb.grid(row=row_idx, column=1, sticky="w", padx=S(20), pady=S(10))
-        row_idx += 1
 
         create_labeled_entry(
             label_text="Super Detection Pixel Treshold:",
@@ -841,30 +769,6 @@ class Hub:
             use_general_config=False,
             tooltip_text='Amount of "purple" pixels the bot must detect to consider a hypercharge is ready.'
         )
-
-        # # 3) Console Debug (store in general_config)
-        # lbl_debug = ctk.CTkLabel(container, text="Console Debug:", font=("Arial", S(18)))
-        # lbl_debug.grid(row=row_idx, column=0, sticky="e", padx=S(20), pady=S(10))
-        # debug_var = tk.BooleanVar(
-        #     value=(str(self.general_config["super_debug"]).lower() in ["yes", "true"])
-        # )
-        #
-        # def toggle_debug():
-        #     self.general_config["super_debug"] = "yes" if debug_var.get() else "no"
-        #     save_dict_as_toml(self.general_config, self.general_config_path)
-        #
-        # debug_cb = ctk.CTkCheckBox(
-        #     container,
-        #     text="",
-        #     variable=debug_var,
-        #     command=toggle_debug,
-        #     fg_color="#AA2A2A",
-        #     hover_color="#BB3A3A",
-        #     width=S(30),
-        #     height=S(30)
-        # )
-        # debug_cb.grid(row=row_idx, column=1, sticky="w", padx=S(20), pady=S(10))
-        # row_idx += 1
 
         # 1) Max IPS (store in general_config)
         create_labeled_entry(

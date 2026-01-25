@@ -1,10 +1,9 @@
 state_check = 5
 no_detections = 10
-specific_brawlers = 999
 game_start = 0
 idle = 5
 gadget = 0.5
 hypercharge = 1.0
 super = 0.1
-wall_detection = 0.3
+wall_detection = 0.2
 no_detection_proceed = 6.5

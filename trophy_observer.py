@@ -121,7 +121,8 @@ class TrophyObserver:
             _, text, conf = result[0]
             game_result, ratio = self.rework_game_result(text)
             if ratio < 0.55:
-                print("Couldn't find game result", game_result, ratio)
+                if ratio > 0:
+                    print("Couldn't find game result", game_result, ratio)
                 return False
 
         self.add_trophies(game_result, current_brawler)

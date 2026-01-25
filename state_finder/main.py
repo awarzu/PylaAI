@@ -21,17 +21,12 @@ for file in os.listdir("./state_finder/images_to_detect"):
         images_with_star_drop.append(file)
 # path = r"./images_to_detect/"
 region_data = load_toml_as_dict("./cfg/lobby_config.toml")['template_matching']
-check_brawl_stars_crashed = load_toml_as_dict("./cfg/general_config.toml")['check_if_brawl_stars_crashed'] == "yes"
-bot_plays_in_background = load_toml_as_dict("./cfg/general_config.toml")['bot_plays_in_background'] == "yes"
+
 def is_template_in_region(image, template_path, region):
     current_height, current_width = image.shape[:2]
-    if not bot_plays_in_background:
-        orig_x, orig_y, orig_width, orig_height = region
-        width_ratio, height_ratio = current_width / orig_screen_width, current_height / orig_screen_height
+    orig_x, orig_y, orig_width, orig_height = region
+    width_ratio, height_ratio = current_width / orig_screen_width, current_height / orig_screen_height
 
-    else:
-        orig_x, orig_y, orig_width, orig_height = 0, 0, current_width, current_height
-        width_ratio, height_ratio = current_width / 1774, current_height / 998
 
     new_x, new_y = int(orig_x * width_ratio), int(orig_y * height_ratio)
     new_width, new_height = int(orig_width * width_ratio), int(orig_height * height_ratio)
@@ -46,10 +41,7 @@ def is_template_in_region(image, template_path, region):
 
 
 def load_template(image_path, width, height):
-    if not bot_plays_in_background:
-        current_width_ratio, current_height_ratio = width / orig_screen_width, height / orig_screen_height
-    else:
-        current_width_ratio, current_height_ratio = width / 1774, height / 998
+    current_width_ratio, current_height_ratio = width / orig_screen_width, height / orig_screen_height
     image = cv2.imread(image_path)
     orig_height, orig_width = image.shape[:2]
     resized_image = cv2.resize(image, (int(orig_width * current_width_ratio), int(orig_height * current_height_ratio)))
@@ -85,14 +77,14 @@ def find_game_result(screenshot):
 
     # Appliquez l'OCR
     result = reader.readtext(screenshot)
-    # save screenshot to debug_frames folder and the current datetime as filename
     if len(result) == 0:
         return False
 
     _, text, conf = result[0]
     game_result, ratio = rework_game_result(text)
     if ratio < 0.55:
-        print("Couldn't find game result", game_result, ratio)
+        if ratio > 0:
+            print("Couldn't find game result", game_result, ratio)
         return False
     return True
 
@@ -107,9 +99,6 @@ def get_in_game_state(image):
 
     if count_hsv_pixels(image, (0, 0, 255), (0, 0, 255)) > 200000:
         return "play_store"
-
-    if not is_template_in_region(image, path + "brawl_stars_icon.PNG", region_data['brawl_stars_icon']) and check_brawl_stars_crashed:
-        return "brawl_stars_crashed"
 
     if is_in_brawl_pass(image) or is_in_star_road(image):
         return "shop"

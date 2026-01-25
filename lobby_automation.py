@@ -3,7 +3,9 @@ from queue import Empty
 
 import numpy as np
 import pyautogui
-from utils import extract_text_and_positions, count_hsv_pixels, load_toml_as_dict
+
+from stage_manager import load_image
+from utils import extract_text_and_positions, count_hsv_pixels, load_toml_as_dict, find_template_center
 
 debug = load_toml_as_dict("cfg/general_config.toml")['super_debug'] == "yes"
 
@@ -15,9 +17,8 @@ scale_factor = min(width_ratio, height_ratio)
 
 class LobbyAutomation:
 
-    def __init__(self, frame_queue, window_controller):
+    def __init__(self, window_controller):
         self.coords_cfg = load_toml_as_dict("./cfg/lobby_config.toml")
-        self.frame_queue = frame_queue
         self.window_controller = window_controller
 
     def check_for_idle(self, frame):
@@ -30,16 +31,13 @@ class LobbyAutomation:
             self.window_controller.click(int(535 * width_ratio), int(615 * height_ratio))
 
     def select_brawler(self, brawler):
-        x, y = self.coords_cfg['lobby']['brawlers_btn'][0] * width_ratio, self.coords_cfg['lobby']['brawlers_btn'][
-            1] * height_ratio
+        self.window_controller.screenshot()
+        brawler_menu_btn_coords = find_template_center(self.window_controller.screenshot(), load_image(r'state_finder/images_to_detect/brawler_menu_btn.png', self.window_controller.scale_factor))
+        x, y = brawler_menu_btn_coords
         self.window_controller.click(x, y)
         c = 0
         for i in range(50):
-            try:
-                screenshot = self.frame_queue.get(timeout=1)
-            except Empty:
-                continue
-
+            screenshot = self.window_controller.screenshot()
             screenshot = screenshot.resize((int(screenshot.width * 0.65), int(screenshot.height * 0.65)))
             screenshot = np.array(screenshot)
             if debug: print("extracting text on current screen...")
@@ -62,8 +60,7 @@ class LobbyAutomation:
                 x, y = reworked_results[brawler]['center']
                 self.window_controller.click(int(x * 1.5385), int(y * 1.5385))
                 time.sleep(1)
-                select_x, select_y = self.coords_cfg['lobby']['select_btn'][0], \
-                                     self.coords_cfg['lobby']['select_btn'][1]
+                select_x, select_y = self.coords_cfg['lobby']['select_btn'][0], self.coords_cfg['lobby']['select_btn'][1]
                 self.window_controller.click(select_x, select_y, already_include_ratio=False)
                 time.sleep(0.5)
                 if debug: print("Selected brawler ", brawler)

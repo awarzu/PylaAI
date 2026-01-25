@@ -3,21 +3,13 @@ import random
 import time
 
 import cv2
-import pyautogui
 from shapely import LineString
 from shapely.geometry import Polygon
 from state_finder.main import get_state
 from detect import Detect
 from utils import load_toml_as_dict, count_hsv_pixels, load_brawlers_info
 
-
-pyautogui.PAUSE = 0
-
-
-orig_screen_width, orig_screen_height = 1920, 1080
-brawl_stars_width, brawl_stars_height = 1774, 998
-width, height = pyautogui.size()
-
+brawl_stars_width, brawl_stars_height = 1920, 1080
 
 class Movement:
 
@@ -44,16 +36,9 @@ class Movement:
         self.time_since_hypercharge_checked = time.time()
         self.is_hypercharge_ready = False
         self.window_controller = window_controller
-        self.bot_plays_in_background = load_toml_as_dict("cfg/general_config.toml")["bot_plays_in_background"] == "yes"
-        if not self.bot_plays_in_background:
-            self.width_ratio = width / orig_screen_width
-            self.height_ratio = height / orig_screen_height
-        else:
-            self.width_ratio = window_controller.width / brawl_stars_width
-            self.height_ratio = window_controller.height / brawl_stars_height
 
-        scale_factor = min(self.width_ratio, self.height_ratio)
-        self.TILE_SIZE = 65 * scale_factor
+
+        self.TILE_SIZE = 65
     @staticmethod
     def get_enemy_pos(enemy):
         return (enemy[0] + enemy[2]) / 2, (enemy[1] + enemy[3]) / 2
@@ -88,12 +73,15 @@ class Movement:
         self.window_controller.press_key("M")
 
     def use_hypercharge(self):
+        print("Using hypercharge")
         self.window_controller.press_key("H")
 
     def use_gadget(self):
+        print("Using gadget")
         self.window_controller.press_key("G")
 
     def use_super(self):
+        print("Using super")
         self.window_controller.press_key("E")
 
     @staticmethod
@@ -138,7 +126,7 @@ class Movement:
             self.fix_movement_keys['fixed'] = reversed_movement
             self.fix_movement_keys['toggled'] = True
             self.fix_movement_keys['started_at'] = current_time
-            print(f"REVERSED! from {movement} to {reversed_movement}!")
+            #print(f"REVERSED! from {movement} to {reversed_movement}!")
             return reversed_movement
 
         return movement
@@ -146,28 +134,10 @@ class Movement:
 
 class Play(Movement):
 
-    def __init__(self, main_info_model, specific_info_model, starting_screen_model, tile_detector_model, window_controller):
+    def __init__(self, main_info_model, starting_screen_model, tile_detector_model, window_controller):
         super().__init__(window_controller)
 
-        self.specific_game_data = {}
         self.Detect_main_info = Detect(main_info_model, classes=['enemy', 'teammate', 'player'])
-        self.Detect_specific_info = Detect(specific_info_model,
-                                           classes=['ammo', 'ball', 'damage_taken', 'defeat', 'draw',
-                                                    'enemy_health_bar', 'enemy_position', 'gadget', 'gem',
-                                                    'hypercharge', 'player_health_bar', 'player_position', 'respawning',
-                                                    'shot_success', 'super', 'teammate_health bar', 'teammate_position',
-                                                    'victory', 'wall', 'bush', '8bit', 'amber', 'ash', 'barley', 'bea',
-                                                    'belle', 'bibi', 'bo', 'bonnie', 'brock', 'bull', 'buster', 'buzz',
-                                                    'byron', 'carl', 'charlie', 'chester', 'chuck', 'colette', 'colt',
-                                                    'cordelious', 'crow', 'darryl', 'doug', 'dynamike', 'edgar',
-                                                    'primo', 'emz', 'eve', 'fang', 'frank', 'gale', 'gene', 'grom',
-                                                    'gray', 'griff', 'gus', 'hank', 'jacky', 'janet', 'jessie', 'kit',
-                                                    'larry_lawrie', 'leon', 'lola', 'lou', 'mandy', 'maisie', 'max',
-                                                    'meg', 'melodie', 'mico', 'mortis', 'mrp', 'nani', 'nita', 'otis',
-                                                    'pam', 'penny', 'piper', 'poco', 'rico', 'rosa', 'rt', 'ruffs',
-                                                    'sam', 'sandy', 'shelly', 'spike', 'sprout', 'stu', 'squeak',
-                                                    'surge', 'tara', 'tick', 'willow', 'lily', 'enemy_ability',
-                                                    'ally_ability'])
         self.Detect_starting_screen = Detect(starting_screen_model)
         self.tile_detector_model_classes = load_toml_as_dict("cfg/bot_config.toml")["wall_model_classes"]
         self.Detect_tile_detector = Detect(
@@ -181,12 +151,13 @@ class Play(Movement):
         self.time_since_super_checked = time.time()
         self.time_since_walls_checked = time.time()
         self.time_since_movement_change = time.time()
+        self.time_since_player_last_found = time.time()
         self.current_brawler = None
         self.is_hypercharge_ready = False
         self.is_gadget_ready = False
         self.is_super_ready = False
         self.brawlers_info = load_brawlers_info()
-        self.brawler_ranges = self.load_brawler_ranges(self.brawlers_info)
+        self.brawler_ranges = None
         self.time_since_detections = {
             "player": time.time(),
             "enemy": time.time(),
@@ -205,15 +176,12 @@ class Play(Movement):
         self.hypercharge_pixels_minimum = load_toml_as_dict("cfg/bot_config.toml")["hypercharge_pixels_minimum"]
         self.super_pixels_minimum = load_toml_as_dict("cfg/bot_config.toml")["super_pixels_minimum"]
         self.wall_detection_confidence = load_toml_as_dict("cfg/bot_config.toml")["wall_detection_confidence"]
+        self.entity_detection_confidence = load_toml_as_dict("cfg/bot_config.toml")["entity_detection_confidence"]
 
-    def get_specific_data(self, frame):
-        self.specific_game_data = self.Detect_specific_info.detect_objects(frame)
-
-    @staticmethod
-    def load_brawler_ranges(brawlers_info=None):
+    def load_brawler_ranges(self, brawlers_info=None):
         if not brawlers_info:
             brawlers_info = load_brawlers_info()
-        screen_size_ratio = min(height / 1080, width / 1920)
+        screen_size_ratio = self.window_controller.scale_factor
         ranges = {}
         for brawler, info in brawlers_info.items():
             attack_range = info['attack_range']
@@ -253,7 +221,7 @@ class Play(Movement):
             return preferred_movement
         else:
             # Try alternative movements
-            alternative_moves = ['W', 'A', 'D', 'S']
+            alternative_moves = ['W', 'A', 'S', 'D']
             alternative_moves.remove(preferred_movement)
             random.shuffle(alternative_moves)
             for move in alternative_moves:
@@ -291,12 +259,12 @@ class Play(Movement):
         return None, None
 
     def get_main_data(self, frame):
-        data = self.Detect_main_info.detect_objects(frame, conf_tresh=0.7)
+        data = self.Detect_main_info.detect_objects(frame, conf_tresh=self.entity_detection_confidence)
         return data
 
     def is_path_blocked(self, player_pos, move_direction, walls, distance=None):  # Increased distance
         if distance is None:
-            distance = self.TILE_SIZE
+            distance = self.TILE_SIZE*self.window_controller.scale_factor
         dx, dy = 0, 0
         if 'w' in move_direction.lower():
             dy -= distance
@@ -338,7 +306,7 @@ class Play(Movement):
         movement = movement.lower()
         keys_to_keyDown = []
         keys_to_keyUp = []
-        for key in ['w', 'a', 'd', 's']:
+        for key in ['w', 'a', 's', 'd']:
             if key in movement:
                 keys_to_keyDown.append(key)
             else:
@@ -352,6 +320,8 @@ class Play(Movement):
         self.keys_hold = keys_to_keyDown
 
     def get_brawler_range(self, brawler):
+        if self.brawler_ranges is None:
+            self.brawler_ranges = self.load_brawler_ranges(self.brawlers_info)
         return self.brawler_ranges[brawler]
 
     def loop(self, brawler, data, current_time):
@@ -364,22 +334,22 @@ class Play(Movement):
         return movement
 
     def check_if_hypercharge_ready(self, frame):
-        screenshot = frame.crop((1220 * self.width_ratio, 860 * self.height_ratio, 1400 * self.width_ratio, 1000 * self.height_ratio))
+        screenshot = frame.crop((1350 * self.window_controller.width_ratio, 940 * self.window_controller.height_ratio, 1450 * self.window_controller.width_ratio, 1050 * self.window_controller.height_ratio))
         purple_pixels = count_hsv_pixels(screenshot, (137, 158, 159), (179, 255, 255))
         if purple_pixels > self.hypercharge_pixels_minimum:
             return True
         return False
 
     def check_if_gadget_ready(self, frame):
-        screenshot = frame.crop((1450 * self.width_ratio, 860 * self.height_ratio, 1630 * self.width_ratio, 1020 * self.height_ratio))
+        screenshot = frame.crop((1580 * self.window_controller.width_ratio, 930 * self.window_controller.height_ratio, 1700 * self.window_controller.width_ratio, 1050 * self.window_controller.height_ratio))
         green_pixels = count_hsv_pixels(screenshot, (57, 219, 165), (62, 255, 255))
         if green_pixels > self.gadget_pixels_minimum:
             return True
         return False
 
     def check_if_super_ready(self, frame):
-        screenshot = frame.crop((1308 * self.width_ratio, 702 * self.height_ratio, 1500 * self.width_ratio, 895 * self.height_ratio))
-        yellow_pixels = count_hsv_pixels(screenshot, (19, 200, 249), (24, 226, 255))
+        screenshot = frame.crop((1460 * self.window_controller.width_ratio, 830 * self.window_controller.height_ratio, 1560 * self.window_controller.width_ratio, 930 * self.window_controller.height_ratio))
+        yellow_pixels = count_hsv_pixels(screenshot, (19, 190, 249), (24, 240, 255))
         if yellow_pixels > self.super_pixels_minimum:
             return True
         return False
@@ -454,7 +424,7 @@ class Play(Movement):
         else:
             print("default paths are blocked")
             # If all preferred directions are blocked, try other directions
-            alternative_moves = ['W', 'A', 'D', 'S']
+            alternative_moves = ['W', 'A', 'S', 'D']
             random.shuffle(alternative_moves)
             for move in alternative_moves:
                 if not self.is_path_blocked(player_pos, move, walls):
@@ -521,8 +491,11 @@ class Play(Movement):
 
         data = self.validate_game_data(data)
         self.track_no_detections(data)
+        if data:
+            self.time_since_player_last_found = time.time()
         if not data:
-            self.window_controller.keys_up(list("wasd"))
+            if current_time - self.time_since_player_last_found > 1.0:
+                self.window_controller.keys_up(list("wasd"))
             self.time_since_different_movement = time.time()
             if current_time - self.time_since_last_proceeding > self.no_detection_proceed_delay:
                 current_state = get_state(frame)
