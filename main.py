@@ -32,8 +32,6 @@ debug = load_toml_as_dict("cfg/general_config.toml")['super_debug'] == "yes"
 
 
 def pyla_main(data):
-    current_emulator = load_toml_as_dict("cfg/general_config.toml")["current_emulator"]
-
     class Main:
 
         def __init__(self):

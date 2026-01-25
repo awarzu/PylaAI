@@ -36,9 +36,8 @@ class Movement:
         self.time_since_hypercharge_checked = time.time()
         self.is_hypercharge_ready = False
         self.window_controller = window_controller
-
-
-        self.TILE_SIZE = 65
+        self.TILE_SIZE = 60
+        
     @staticmethod
     def get_enemy_pos(enemy):
         return (enemy[0] + enemy[2]) / 2, (enemy[1] + enemy[3]) / 2
