@@ -4,6 +4,7 @@ from queue import Empty
 import numpy as np
 import pyautogui
 
+from brawlers import BrawlerName
 from stage_manager import load_image
 from utils import extract_text_and_positions, count_hsv_pixels, load_toml_as_dict, find_template_center, get_dpi_scale
 
@@ -63,10 +64,8 @@ class LobbyAutomation:
                 orig_key = key
                 for symbol in [' ', '-', '.', "&"]:
                     key = key.replace(symbol, "")
-                if key == "shey":
-                    key = "shelly"
-                if key == "larryslawrie":
-                    key = "larrylawrie"
+                
+                key = self.resolve_ocr_typos(key)
                 reworked_results[key] = results[orig_key]
             if debug:
                 print("All detected text while looking for brawler name:", reworked_results.keys())
@@ -79,7 +78,7 @@ class LobbyAutomation:
                 select_x, select_y = self.coords_cfg['lobby']['select_btn'][0], self.coords_cfg['lobby']['select_btn'][1]
                 self.window_controller.click(select_x, select_y, already_include_ratio=False)
                 time.sleep(0.5)
-                if debug: print("Selected brawler ", brawler)
+                if debug: print("Selected brawler. ", brawler)
                 break
             if c == 0:
                 self.window_controller.swipe(int(1700 * width_ratio), int(900 * height_ratio), int(1700 * width_ratio), int(850 * height_ratio), duration=0.8)
@@ -87,3 +86,18 @@ class LobbyAutomation:
                 continue  # Some weird bug causing the first frame to not get any results so this redoes it
             self.window_controller.swipe(int(1700 * width_ratio), int(900 * height_ratio), int(1700 * width_ratio), int(650 * height_ratio), duration=0.8)
             time.sleep(1)
+
+    @staticmethod
+    def resolve_ocr_typos(potential_brawler_name: str) -> str:
+        """
+        Matches well known 'typos' from OCR to the correct brawler's name
+        or returns the original string
+        """
+
+        matched_typo: str | None = {
+            'shey': BrawlerName.Shelly.value,
+            'shlly': BrawlerName.Shelly.value,
+            'larryslawrie': BrawlerName.Larry.value,
+        }.get(potential_brawler_name, None)
+
+        return matched_typo or potential_brawler_name
