@@ -15,7 +15,8 @@ class TestLobbyAutomation(unittest.TestCase):
     
     @patch("utils.find_template_center")
     @patch("stage_manager.load_image")
-    def test_brawler_coordinates_clicked(self, mock_load_image, mock_find_template):
+    def test_can_select_brawlers(self, mock_load_image, mock_find_template):
+        """Tests that bot can select brawlers once he reaches the brawlers selection menu"""
         EXPECTED_BRAWLER_X = 2012
         EXPECTED_BRAWLER_Y = 978
         TOLERANCE = 50 
