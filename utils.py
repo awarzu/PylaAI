@@ -38,7 +38,6 @@ def extract_text_and_positions(image_path):
 
         text_details[text.lower()] = formatted_bbox
 
-    print("extracted details!")
     return text_details
 
 class DefaultEasyOCR:
