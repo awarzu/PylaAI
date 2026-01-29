@@ -5,7 +5,7 @@ import numpy as np
 import pyautogui
 
 from stage_manager import load_image
-from utils import extract_text_and_positions, count_hsv_pixels, load_toml_as_dict, find_template_center
+from utils import extract_text_and_positions, count_hsv_pixels, load_toml_as_dict, find_template_center, get_dpi_scale
 
 debug = load_toml_as_dict("cfg/general_config.toml")['super_debug'] == "yes"
 
@@ -14,6 +14,7 @@ width, height = pyautogui.size()
 width_ratio = width / orig_screen_width
 height_ratio = height / orig_screen_height
 scale_factor = min(width_ratio, height_ratio)
+scale_factor *= 96/get_dpi_scale()
 
 class LobbyAutomation:
 

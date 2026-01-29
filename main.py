@@ -21,7 +21,7 @@ from stage_manager import StageManager, load_image
 from state_finder.main import get_state
 import state_finder.main as state_finder_main
 from time_management import TimeManagement
-from utils import load_toml_as_dict, current_wall_model_is_latest, api_base_url, find_template_center
+from utils import load_toml_as_dict, current_wall_model_is_latest, api_base_url, find_template_center, get_dpi_scale
 from utils import get_brawler_list, update_missing_brawlers_info, update_icons, check_version, async_notify_user, \
     update_wall_model_classes, get_latest_wall_model_file, get_latest_version, cprint
 from window_controller import WindowController
@@ -158,13 +158,6 @@ if api_base_url != "localhost":
     if not current_wall_model_is_latest():
         print("New Wall detection model found, downloading... (this might take a few minutes depending on your internet speed)")
         get_latest_wall_model_file()
-
-# check if the zoom is 100%
-user32 = ctypes.windll.user32
-user32.SetProcessDPIAware()
-dpi_scale = int(user32.GetDpiForSystem())
-if dpi_scale != 96:
-    print("⚠️⚠️⚠️ Warning ⚠️⚠️⚠️\nScreen's zoom isn't 100%. \nPlease change your Zoom to 100% in your windows settings (just above the display resolution). \nOtherwise there will be unexpected problems (don't hesitate to ask for support in the discord server.")
 
 # Use the smaller ratio to maintain aspect ratio
 app = App(login, SelectBrawler, pyla_main, all_brawlers, Hub)

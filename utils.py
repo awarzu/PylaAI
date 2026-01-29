@@ -363,3 +363,8 @@ def cprint(text: str, hex_color: str): #omg color!!!
         print(f"\033[38;2;{r};{g};{b}m{text}\033[0m")
     except Exception:
         print(text)
+
+def get_dpi_scale():
+    user32 = ctypes.windll.user32
+    user32.SetProcessDPIAware()
+    return int(user32.GetDpiForSystem())

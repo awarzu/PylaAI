@@ -8,7 +8,7 @@ import pyautogui
 from PIL import Image
 import tkinter as tk
 import bettercam
-from utils import load_toml_as_dict, save_dict_as_toml, get_discord_link
+from utils import load_toml_as_dict, save_dict_as_toml, get_discord_link, get_dpi_scale
 from packaging import version
 
 orig_screen_width, orig_screen_height = 1920, 1080
@@ -16,7 +16,7 @@ width, height = pyautogui.size()
 width_ratio = width / orig_screen_width
 height_ratio = height / orig_screen_height
 scale_factor = min(width_ratio, height_ratio)
-
+scale_factor *= 96/get_dpi_scale()
 
 def S(value):
     """Helper to scale integer sizes based on the user's screen."""

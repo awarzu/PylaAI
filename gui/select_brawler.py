@@ -6,7 +6,7 @@ import customtkinter as ctk
 import pyautogui
 from PIL import Image
 from customtkinter import CTkImage
-from utils import load_toml_as_dict, update_toml_file, save_brawler_icon
+from utils import load_toml_as_dict, update_toml_file, save_brawler_icon, get_dpi_scale
 from tkinter import filedialog
 
 debug = load_toml_as_dict("cfg/general_config.toml")['super_debug'] == "yes"
@@ -15,6 +15,7 @@ width, height = pyautogui.size()
 width_ratio = width / orig_screen_width
 height_ratio = height / orig_screen_height
 scale_factor = min(width_ratio, height_ratio)
+scale_factor *= 96/get_dpi_scale()
 pyla_version = load_toml_as_dict("./cfg/general_config.toml")['pyla_version']
 
 class SelectBrawler:
@@ -81,13 +82,13 @@ class SelectBrawler:
         ctk.CTkButton(self.app, text="Start", command=self.start_bot, fg_color=self.colors['ui box gray'],
                       text_color="white",
                       font=("Comic sans MS", int(25 * scale_factor)), border_color=self.colors['cherry red'],
-                      border_width=int(2 * scale_factor)).place(x=int(390 * scale_factor), y=int((necessary_height-60) * scale_factor))
+                      border_width=int(2 * scale_factor)).place(x=int(390 * scale_factor), y=int((necessary_height-60* scale_factor) ))
 
         ctk.CTkButton(self.app, text="Load Brawler Config", command=self.load_brawler_config, fg_color=self.colors['ui box gray'],
                       text_color="white",
                       font=("Comic sans MS", int(25 * scale_factor)), border_color=self.colors['cherry red'],
                       border_width=int(2 * scale_factor)).place(x=int(10 * scale_factor),
-                                                                y=int((necessary_height-60) * scale_factor))
+                                                                y=int((necessary_height-60* scale_factor) ))
 
         self.timer_var = tk.StringVar()
         self.timer_entry = ctk.CTkEntry(
@@ -96,12 +97,12 @@ class SelectBrawler:
             fg_color=self.colors['ui box gray'], border_color=self.colors['cherry red'], text_color="white"
         )
         ctk.CTkLabel(self.app, text="Run for :", font=("Comic sans MS", int(22 * scale_factor)),
-                     text_color="white").place(x=int(scale_factor * 580), y=int((necessary_height-55) * scale_factor))
-        self.timer_entry.place(x=int(scale_factor * 675), y=int((necessary_height-55) * scale_factor))
+                     text_color="white").place(x=int(scale_factor * 580), y=int((necessary_height-55* scale_factor) ))
+        self.timer_entry.place(x=int(scale_factor * 675), y=int((necessary_height-55* scale_factor) ))
         self.timer_var.set(load_toml_as_dict("cfg/general_config.toml")["run_for_minutes"])
         self.timer_var.trace_add("write", lambda *args: self.update_timer(self.timer_var.get()))
         ctk.CTkLabel(self.app, text="minutes", font=("Comic sans MS", int(22 * scale_factor)),
-                     text_color="white").place(x=int(scale_factor * 760), y=int((necessary_height-55) * scale_factor))
+                     text_color="white").place(x=int(scale_factor * 760), y=int((necessary_height-55* scale_factor) ))
 
         self.app.mainloop()
 
