@@ -52,7 +52,7 @@ class WindowController:
             device_list = adb.device_list()
             if not device_list:
                 # Try connecting to common ports if empty
-                for port in [5555, load_toml_as_dict("cfg/general_config.toml")["emulator_port"], 16384, 5635]:
+                for port in [5555, load_toml_as_dict("cfg/general_config.toml")["emulator_port"], 16384, 5635] + list(range(5565, 5756, 10)):
                     try:
                          adb.connect(f"127.0.0.1:{port}")
                     except:
