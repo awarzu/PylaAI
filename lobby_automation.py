@@ -4,8 +4,8 @@ from queue import Empty
 import numpy as np
 import pyautogui
 
-from brawlers import BrawlerName
 from stage_manager import load_image
+from typization import BrawlerName
 from utils import extract_text_and_positions, count_hsv_pixels, load_toml_as_dict, find_template_center, get_dpi_scale
 
 debug = load_toml_as_dict("cfg/general_config.toml")['super_debug'] == "yes"
