@@ -23,3 +23,4 @@ def check_if_exists(username):
         return user_exists
     else:
         print("Failed to check user existence.")
+        return False

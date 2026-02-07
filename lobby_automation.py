@@ -1,21 +1,12 @@
 import time
-from queue import Empty
 
 import numpy as np
-import pyautogui
 
 from stage_manager import load_image
 from typization import BrawlerName
-from utils import extract_text_and_positions, count_hsv_pixels, load_toml_as_dict, find_template_center, get_dpi_scale
+from utils import extract_text_and_positions, count_hsv_pixels, load_toml_as_dict, find_template_center
 
 debug = load_toml_as_dict("cfg/general_config.toml")['super_debug'] == "yes"
-
-orig_screen_width, orig_screen_height = 1920, 1080
-width, height = pyautogui.size()
-width_ratio = width / orig_screen_width
-height_ratio = height / orig_screen_height
-scale_factor = min(width_ratio, height_ratio)
-scale_factor *= 96/get_dpi_scale()
 
 class LobbyAutomation:
 
@@ -25,12 +16,14 @@ class LobbyAutomation:
 
     def check_for_idle(self, frame):
         screenshot = frame
+        wr = self.window_controller.width_ratio
+        hr = self.window_controller.height_ratio
         screenshot = screenshot.crop(
-            (int(400 * width_ratio), int(380 * height_ratio), int(1500 * width_ratio), int(700 * height_ratio)))
+            (int(400 * wr), int(380 * hr), int(1500 * wr), int(700 * hr)))
         gray_pixels = count_hsv_pixels(screenshot, (0, 0, 66), (0, 0, 66))
         if debug: print("gray pixels (if > 1000 then bot will try to unidle) :", gray_pixels)
         if gray_pixels > 1000:
-            self.window_controller.click(int(535 * width_ratio), int(615 * height_ratio))
+            self.window_controller.click(int(535 * wr), int(615 * hr))
 
     def select_brawler(self, brawler):
         self.window_controller.screenshot()
@@ -81,10 +74,14 @@ class LobbyAutomation:
                 if debug: print("Selected brawler ", brawler)
                 break
             if c == 0:
-                self.window_controller.swipe(int(1700 * width_ratio), int(900 * height_ratio), int(1700 * width_ratio), int(850 * height_ratio), duration=0.8)
+                wr = self.window_controller.width_ratio
+                hr = self.window_controller.height_ratio
+                self.window_controller.swipe(int(1700 * wr), int(900 * hr), int(1700 * wr), int(850 * hr), duration=0.8)
                 c += 1
-                continue  # Some weird bug causing the first frame to not get any results so this redoes it
-            self.window_controller.swipe(int(1700 * width_ratio), int(900 * height_ratio), int(1700 * width_ratio), int(650 * height_ratio), duration=0.8)
+                continue
+            wr = self.window_controller.width_ratio
+            hr = self.window_controller.height_ratio
+            self.window_controller.swipe(int(1700 * wr), int(900 * hr), int(1700 * wr), int(650 * hr), duration=0.8)
             time.sleep(1)
 
     @staticmethod

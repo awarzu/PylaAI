@@ -23,7 +23,7 @@ def login(logged_in_setter):
             result_label.configure(text="Login Successful!", text_color="green")
             logged_in_setter(True)
             app.destroy()
-            update_toml_file("../cfg/login.toml", {"key": api_key})
+            update_toml_file("./cfg/login.toml", {"key": api_key})
             return
         else:
             result_label.configure(text="Invalid API Key", text_color="red")
