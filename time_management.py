@@ -27,5 +27,5 @@ class TimeManagement:
         return self.check_time("idle")
 
     def ago_game_started(self):
-        game_started_since = abs(time.time()) - self.states['game_start']
+        game_started_since = time.time() - self.states['game_start']
         return game_started_since

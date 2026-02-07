@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 from difflib import SequenceMatcher
 import pyautogui
+from PIL import Image
 sys.path.append(os.path.abspath('../'))
 from utils import count_hsv_pixels, load_toml_as_dict
 
@@ -97,7 +98,7 @@ def get_in_game_state(image):
     if is_in_brawler_selection(image):
         return "brawler_selection"
 
-    if count_hsv_pixels(image, (0, 0, 255), (0, 0, 255)) > 200000:
+    if count_hsv_pixels(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)), (0, 0, 255), (0, 0, 255)) > 200000:
         return "play_store"
 
     if is_in_brawl_pass(image) or is_in_star_road(image):

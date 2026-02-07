@@ -13,12 +13,10 @@ from discord import Webhook
 import discord
 import cv2
 import numpy as np
-from PIL import Image
 from packaging import version
 import bettercam
 import time
 import easyocr
-import json
 
 def extract_text_and_positions(image_path):
     results = reader.readtext(image_path)
@@ -350,7 +348,9 @@ def update_wall_model_classes():
     if classes:
         if classes != current_classes:
             print("New wall model classes found. Updating...")
-            update_toml_file("cfg/bot_config.toml", {"wall_model_classes": classes})
+            full_config = load_toml_as_dict("cfg/bot_config.toml")
+            full_config["wall_model_classes"] = classes
+            update_toml_file("cfg/bot_config.toml", full_config)
             print("Updated the wall model classes.")
     else:
         print("Failed to update the wall model classes, please report this error.")

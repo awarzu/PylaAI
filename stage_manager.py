@@ -2,7 +2,6 @@ import os.path
 
 import asyncio
 import time
-from queue import Empty
 
 import cv2
 import numpy as np
@@ -78,7 +77,8 @@ class StageManager:
                 self.window_controller.click(x, y)
                 return
 
-        x, y = self.lobby_config['lobby']['brawl_stars_icon'][0]*self.window_controller.width_ratio, self.lobby_config['lobby']['brawl_stars_icon'][1]*self.window_controller.height_ratio
+        brawl_stars_icon_coords = self.lobby_config['lobby'].get('brawl_stars_icon', [960, 540])
+        x, y = brawl_stars_icon_coords[0]*self.window_controller.width_ratio, brawl_stars_icon_coords[1]*self.window_controller.height_ratio
         self.window_controller.click(x, y)
 
     @staticmethod
@@ -116,11 +116,11 @@ class StageManager:
                 print("Brawler reached required trophies/wins. No more brawlers selected for pushing in the menu. "
                       "Bot will"
                       "now pause itself until closed.", value, push_current_brawler_till)
-                time.sleep(10 ** 5)
                 loop = asyncio.new_event_loop()
                 screenshot = self.window_controller.screenshot()
                 loop.run_until_complete(async_notify_user("bot_is_stuck", screenshot))
                 loop.close()
+                time.sleep(10 ** 5)
                 return
             loop = asyncio.new_event_loop()
             screenshot = self.window_controller.screenshot()
@@ -133,10 +133,7 @@ class StageManager:
             next_brawler_name = self.brawlers_pick_data[0]['brawler']
             if self.brawlers_pick_data[0]["automatically_pick"]:
                 if debug: print("Picking next automatically picked brawler")
-                try:
-                    screenshot = self.frame_queue.get(timeout=1)
-                except Empty:
-                    screenshot = self.window_controller.screenshot()
+                screenshot = self.window_controller.screenshot()
                 current_state = get_state(screenshot)
                 if current_state != "lobby":
                     print("Trying to reach the lobby to switch brawler")
@@ -145,6 +142,8 @@ class StageManager:
                     self.window_controller.press_key("Q")
                     if debug: print("Pressed Q to return to lobby")
                     time.sleep(1)
+                    screenshot = self.window_controller.screenshot()
+                    current_state = get_state(screenshot)
                 self.Lobby_automation.select_brawler(next_brawler_name)
             else:
                 print("Next brawler is in manual mode, waiting 10 seconds to let user switch.")
@@ -230,7 +229,7 @@ class StageManager:
             self.window_controller.click(*popup_location)
 
     def do_state(self, state, data=None):
-        if data:
+        if data is not None:
             self.states[state](data)
             return
         self.states[state]()

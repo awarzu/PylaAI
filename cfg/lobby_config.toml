@@ -2,6 +2,7 @@
 [lobby]
 select_btn = [150, 950]
 trophy_observer = [20, 10, 650, 200]
+brawl_stars_icon = [960, 540]
 [template_matching]
 powerpoint = [1000, 5, 80, 80]
 brawler_menu_task = [1450, 0, 80, 80]

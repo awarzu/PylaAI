@@ -124,11 +124,10 @@ class SelectBrawler:
                 with open(file_path, 'r') as file:
                     brawlers_data = json.load(file)
                     try:
-                        for brawler_data in brawlers_data:
-                            # if we find a brawler that has already reached it's goal, we remove it from the list
-                            push_type = brawler_data["type"]
-                            if brawler_data["push_until"] <= brawler_data[push_type]:
-                                brawlers_data.remove(brawler_data)
+                        brawlers_data = [
+                            bd for bd in brawlers_data
+                            if not (bd["push_until"] <= bd[bd["type"]])
+                        ]
                         self.brawlers_data = brawlers_data
                         print("Brawler data loaded successfully :", brawlers_data)
                     except Exception as e:
@@ -180,7 +179,8 @@ class SelectBrawler:
         def submit_data():
             push_until_value = push_until_var.get()
             push_until_value = int(push_until_value) if push_until_value.isdigit() else ""
-            trophies_value = int(trophies_var.get())
+            trophies_raw = trophies_var.get()
+            trophies_value = int(trophies_raw) if trophies_raw.isdigit() else 0
             wins_value = wins_var.get()
             wins_value = int(wins_value) if wins_value.isdigit() else ""
             current_win_streak_value = current_win_streak_var.get()

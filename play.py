@@ -96,7 +96,9 @@ class Movement:
         translation_table = str.maketrans("wasd", "sdwa")
         return movement.translate(translation_table)
 
-    def unstuck_movement_if_needed(self, movement, current_time=time.time()):
+    def unstuck_movement_if_needed(self, movement, current_time=None):
+        if current_time is None:
+            current_time = time.time()
         movement = movement.lower()
         if self.fix_movement_keys['toggled']:
             if current_time - self.fix_movement_keys['started_at'] > self.fix_movement_keys['duration']:
@@ -245,14 +247,14 @@ class Play(Movement):
         for enemy in enemy_data:
             distance = self.get_distance(self.get_enemy_pos(enemy), player_coords)
             if distance < closest_distance:
+                closest_distance = distance
                 if self.is_enemy_hittable((player_pos_x, player_pos_y), self.get_enemy_pos(enemy), walls, skill_type):
                     closest_hittable = [self.get_enemy_pos(enemy), distance]
-                    continue
-
-                closest_unhittable = [self.get_enemy_pos(enemy), distance]
-        if bool(closest_hittable):
+                else:
+                    closest_unhittable = [self.get_enemy_pos(enemy), distance]
+        if closest_hittable:
             return closest_hittable
-        elif bool(closest_unhittable):
+        elif closest_unhittable:
             return closest_unhittable
 
         return None, None
@@ -396,6 +398,8 @@ class Play(Movement):
         if not self.is_there_enemy(enemy_data):
             return self.no_enemy_movement(player_data, walls)
         enemy_coords, enemy_distance = self.find_closest_enemy(enemy_data, player_pos, walls, "attack")
+        if enemy_coords is None:
+            return self.no_enemy_movement(player_data, walls)
         direction_x = enemy_coords[0] - player_pos[0]
         direction_y = enemy_coords[1] - player_pos[1]
 
