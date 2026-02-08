@@ -14,21 +14,24 @@ brawl_stars_width, brawl_stars_height = 1920, 1080
 class Movement:
 
     def __init__(self, window_controller):
+        bot_config = load_toml_as_dict("cfg/bot_config.toml")
+        time_config = load_toml_as_dict("cfg/time_tresholds.toml")
         self.fix_movement_keys = {
-            "delay_to_trigger": load_toml_as_dict("cfg/bot_config.toml")["unstuck_movement_delay"],
-            "duration": load_toml_as_dict("cfg/bot_config.toml")["unstuck_movement_hold_time"],
+            "delay_to_trigger": bot_config["unstuck_movement_delay"],
+            "duration": bot_config["unstuck_movement_hold_time"],
             "toggled": False,
             "started_at": time.time(),
             "fixed": ""
         }
-        self.game_mode = load_toml_as_dict("cfg/bot_config.toml")["gamemode_type"]
-        self.should_use_gadget = load_toml_as_dict("cfg/bot_config.toml")["bot_uses_gadgets"] == "yes" or load_toml_as_dict("cfg/bot_config.toml")["bot_uses_gadgets"] == "true"
-        self.super_treshold = load_toml_as_dict("cfg/time_tresholds.toml")["super"]
-        self.gadget_treshold = load_toml_as_dict("cfg/time_tresholds.toml")["gadget"]
-        self.hypercharge_treshold = load_toml_as_dict("cfg/time_tresholds.toml")["hypercharge"]
-        self.walls_treshold = load_toml_as_dict("cfg/time_tresholds.toml")["wall_detection"]
+        self.game_mode = bot_config["gamemode_type"]
+        gadget_value = bot_config["bot_uses_gadgets"]
+        self.should_use_gadget = str(gadget_value).lower() in ("yes", "true", "1")
+        self.super_treshold = time_config["super"]
+        self.gadget_treshold = time_config["gadget"]
+        self.hypercharge_treshold = time_config["hypercharge"]
+        self.walls_treshold = time_config["wall_detection"]
         self.keep_walls_in_memory = self.walls_treshold <= 1
-        self.last_walls_data = None
+        self.last_walls_data = []
         self.keys_hold = []
         self.time_since_different_movement = time.time()
         self.time_since_gadget_checked = time.time()
@@ -138,9 +141,12 @@ class Play(Movement):
     def __init__(self, main_info_model, starting_screen_model, tile_detector_model, window_controller):
         super().__init__(window_controller)
 
+        bot_config = load_toml_as_dict("cfg/bot_config.toml")
+        time_config = load_toml_as_dict("cfg/time_tresholds.toml")
+
         self.Detect_main_info = Detect(main_info_model, classes=['enemy', 'teammate', 'player'])
         self.Detect_starting_screen = Detect(starting_screen_model)
-        self.tile_detector_model_classes = load_toml_as_dict("cfg/bot_config.toml")["wall_model_classes"]
+        self.tile_detector_model_classes = bot_config["wall_model_classes"]
         self.Detect_tile_detector = Detect(
             tile_detector_model,
             classes=self.tile_detector_model_classes
@@ -150,7 +156,7 @@ class Play(Movement):
         self.time_since_gadget_checked = time.time()
         self.time_since_hypercharge_checked = time.time()
         self.time_since_super_checked = time.time()
-        self.time_since_walls_checked = time.time()
+        self.time_since_walls_checked = 0
         self.time_since_movement_change = time.time()
         self.time_since_player_last_found = time.time()
         self.current_brawler = None
@@ -170,14 +176,14 @@ class Play(Movement):
         self.wall_history = []
         self.wall_history_length = 3  # Number of frames to keep walls
         self.scene_data = []
-        self.should_detect_walls = load_toml_as_dict("cfg/bot_config.toml")["gamemode"] in ["brawlball", "brawl_ball", "brawll ball"]
-        self.minimum_movement_delay = load_toml_as_dict("cfg/bot_config.toml")["minimum_movement_delay"]
-        self.no_detection_proceed_delay = load_toml_as_dict("cfg/time_tresholds.toml")["no_detection_proceed"]
-        self.gadget_pixels_minimum = load_toml_as_dict("cfg/bot_config.toml")["gadget_pixels_minimum"]
-        self.hypercharge_pixels_minimum = load_toml_as_dict("cfg/bot_config.toml")["hypercharge_pixels_minimum"]
-        self.super_pixels_minimum = load_toml_as_dict("cfg/bot_config.toml")["super_pixels_minimum"]
-        self.wall_detection_confidence = load_toml_as_dict("cfg/bot_config.toml")["wall_detection_confidence"]
-        self.entity_detection_confidence = load_toml_as_dict("cfg/bot_config.toml")["entity_detection_confidence"]
+        self.should_detect_walls = bot_config["gamemode"] in ["brawlball", "brawl_ball", "brawll ball"]
+        self.minimum_movement_delay = bot_config["minimum_movement_delay"]
+        self.no_detection_proceed_delay = time_config["no_detection_proceed"]
+        self.gadget_pixels_minimum = bot_config["gadget_pixels_minimum"]
+        self.hypercharge_pixels_minimum = bot_config["hypercharge_pixels_minimum"]
+        self.super_pixels_minimum = bot_config["super_pixels_minimum"]
+        self.wall_detection_confidence = bot_config["wall_detection_confidence"]
+        self.entity_detection_confidence = bot_config["entity_detection_confidence"]
 
     def load_brawler_ranges(self, brawlers_info=None):
         if not brawlers_info:
@@ -241,17 +247,21 @@ class Play(Movement):
 
     def find_closest_enemy(self, enemy_data, player_coords, walls, skill_type):
         player_pos_x, player_pos_y = player_coords
-        closest_distance = float('inf')
+        closest_hittable_distance = float('inf')
+        closest_unhittable_distance = float('inf')
         closest_hittable = None
         closest_unhittable = None
         for enemy in enemy_data:
-            distance = self.get_distance(self.get_enemy_pos(enemy), player_coords)
-            if distance < closest_distance:
-                closest_distance = distance
-                if self.is_enemy_hittable((player_pos_x, player_pos_y), self.get_enemy_pos(enemy), walls, skill_type):
-                    closest_hittable = [self.get_enemy_pos(enemy), distance]
-                else:
-                    closest_unhittable = [self.get_enemy_pos(enemy), distance]
+            enemy_pos = self.get_enemy_pos(enemy)
+            distance = self.get_distance(enemy_pos, player_coords)
+            if self.is_enemy_hittable((player_pos_x, player_pos_y), enemy_pos, walls, skill_type):
+                if distance < closest_hittable_distance:
+                    closest_hittable_distance = distance
+                    closest_hittable = [enemy_pos, distance]
+            else:
+                if distance < closest_unhittable_distance:
+                    closest_unhittable_distance = distance
+                    closest_unhittable = [enemy_pos, distance]
         if closest_hittable:
             return closest_hittable
         elif closest_unhittable:
@@ -299,8 +309,8 @@ class Play(Movement):
                 "enemy": None,
                 "player": None
             }
-        for key, value in data.items():
-            if value:
+        for key in self.time_since_detections:
+            if key in data and data[key]:
                 self.time_since_detections[key] = time.time()
 
     def do_movement(self, movement):

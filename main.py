@@ -111,10 +111,9 @@ def pyla_main(data):
                         break
 
                 if abs(s_time - time.time()) > 1:
-                    if c > 1:
-                        print(c, "IPS")
-                    else:
-                        print(f"{1 / (time.time() - s_time):.2f} IPS")
+                    elapsed = time.time() - s_time
+                    if elapsed > 0:
+                        print(f"{c / elapsed:.2f} IPS")
                     s_time = time.time()
                     c = 0
 

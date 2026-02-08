@@ -46,6 +46,7 @@ class LobbyAutomation:
         x, y = brawler_menu_btn_coords
         self.window_controller.click(x, y)
         c = 0
+        found_brawler = False
         for i in range(50):
             screenshot = self.window_controller.screenshot()
             screenshot = screenshot.resize((int(screenshot.width * 0.65), int(screenshot.height * 0.65)))
@@ -72,6 +73,7 @@ class LobbyAutomation:
                 self.window_controller.click(select_x, select_y, already_include_ratio=False)
                 time.sleep(0.5)
                 if debug: print("Selected brawler ", brawler)
+                found_brawler = True
                 break
             if c == 0:
                 wr = self.window_controller.width_ratio
@@ -83,6 +85,10 @@ class LobbyAutomation:
             hr = self.window_controller.height_ratio
             self.window_controller.swipe(int(1700 * wr), int(900 * hr), int(1700 * wr), int(650 * hr), duration=0.8)
             time.sleep(1)
+        if not found_brawler:
+            print(f"WARNING: Brawler '{brawler}' was not found after 50 scroll attempts. "
+                  f"The bot will continue with the currently selected brawler.")
+            raise ValueError(f"Brawler '{brawler}' could not be found in the brawler selection menu.")
 
     @staticmethod
     def resolve_ocr_typos(potential_brawler_name: str) -> str:

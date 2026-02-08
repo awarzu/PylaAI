@@ -75,7 +75,11 @@ def save_brawler_data(data):
 
 def find_template_center(main_img, template, threshold=0.8):
     main_image_cv = cv2.cvtColor(np.array(main_img), cv2.COLOR_RGB2GRAY)
-    template_cv = cv2.cvtColor(np.array(template), cv2.COLOR_RGB2GRAY)
+    template_arr = np.array(template)
+    if len(template_arr.shape) == 3 and template_arr.shape[2] == 3:
+        template_cv = cv2.cvtColor(template_arr, cv2.COLOR_BGR2GRAY)
+    else:
+        template_cv = template_arr
     w, h = template_cv.shape[::-1]
 
     # Perform template matching
